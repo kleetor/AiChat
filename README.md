@@ -82,5 +82,7 @@ src/main/java/com/example/aichat/
    - 流式响应（SSE），实时显示 AI 回复
    - 夜间模式/主题切换
    - 移动端适配增强
+   - 
+3. **更好的提示词卡片功能**
 
 欢迎 Star 或提交 Issue/PR 参与改进！
