@@ -12,6 +12,10 @@
         .current-prompt-indicator { display: none; align-items: center; gap: 6px; padding: 4px 12px; background: #e0e7ff; border-radius: 20px; font-size: 13px; color: #4338ca; cursor: pointer; transition: background 0.2s; }
         .current-prompt-indicator:hover { background: #c7d2fe; }
         .current-prompt-indicator .remove-prompt { background: none; border: none; color: #ef4444; font-size: 16px; cursor: pointer; margin-left: 4px; }
+        /* 当前模型指示器 */
+        .current-model-indicator { display: none; align-items: center; gap: 6px; padding: 4px 12px; background: #dcfce7; border-radius: 20px; font-size: 13px; color: #166534; cursor: pointer; transition: background 0.2s; }
+        .current-model-indicator:hover { background: #bbf7d0; }
+        .current-model-indicator .remove-prompt { background: none; border: none; color: #ef4444; font-size: 16px; cursor: pointer; margin-left: 4px; }
         /* 主体 */
         .main-area { flex: 1; display: flex; overflow: hidden; }
         /* 侧边栏会话 */
@@ -80,6 +84,40 @@
         .prompt-modal .new-prompt-btn { padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 10px; cursor: pointer; align-self: flex-start; transition: background 0.2s; }
         .prompt-modal .new-prompt-btn:hover { background: #4338ca; }
         .prompt-modal .prompt-empty { text-align: center; color: #9ca3af; padding: 40px; }
+        /* 侧边栏底部 */
+        .sidebar-footer { padding: 12px; border-top: 1px solid #eaecf0; }
+        .settings-btn { width: 100%; padding: 10px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 10px; cursor: pointer; font-size: 14px; display: none; transition: all 0.2s; }
+        .settings-btn:hover { background: #e5e7eb; }
+        
+        /* 设置模态框样式 */
+        .settings-tabs { display: flex; gap: 8px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #e5e7eb; }
+        .tab-btn { flex: 1; padding: 8px 12px; background: #f9fafb; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+        .tab-btn.active { background: #4f46e5; color: white; border-color: #4f46e5; }
+        .tab-btn:hover:not(.active) { background: #f3f4f6; }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        .settings-actions { display: flex; gap: 12px; margin-top: 16px; }
+        .btn-secondary { flex: 1; padding: 12px; background: #f3f4f6; border: 1px solid #d1d5db; color: #374151; border-radius: 12px; font-size: 16px; font-weight: 500; cursor: pointer; transition: background 0.2s; }
+        .btn-secondary:hover { background: #e5e7eb; }
+        
+        .form-group { position: relative; }
+        .toggle-password { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #6b7280; font-size: 14px; }
+        
+        .change-password-btn { width: 100%; padding: 14px; background: #f3f4f6; border: 2px solid #d1d5db; border-radius: 12px; font-size: 16px; font-weight: 500; cursor: pointer; margin-top: 16px; transition: all 0.2s; color: #374151; }
+        .change-password-btn:hover { background: #e5e7eb; border-color: #9ca3af; }
+        
+        .profile-info { background: #f9fafb; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+        .info-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { font-size: 14px; color: #6b7280; }
+        .info-value { font-size: 14px; font-weight: 500; color: #1f2937; }
+        
+        /* 模型列表样式 */
+        .model-list .prompt-card .card-content { font-size: 12px; }
+        .model-list .prompt-card .card-content div { margin-bottom: 4px; }
+        
         @media (max-width: 700px) {
             .sidebar { width: 200px; }
             .app-container { height: 100vh; border-radius: 0; max-width: 100%; }

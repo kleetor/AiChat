@@ -1,11 +1,12 @@
 package com.example.aichat.service;
 
-import com.example.aichat.config.DeepSeekConfig;
 import com.example.aichat.model.ChatMessage;
 import com.example.aichat.model.Conversation;
+import com.example.aichat.model.ModelConfig;
 import com.example.aichat.model.Prompt;
 import com.example.aichat.repository.ChatMessageRepository;
 import com.example.aichat.repository.ConversationRepository;
+import com.example.aichat.repository.ModelConfigRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -24,9 +25,6 @@ public class ChatService {
     private RestTemplate restTemplate;
 
     @Autowired
-    private DeepSeekConfig deepSeekConfig;
-
-    @Autowired
     private ChatHistoryService chatHistoryService;
 
     @Autowired
@@ -36,29 +34,40 @@ public class ChatService {
     private ConversationRepository conversationRepository;
 
     @Autowired
-    private PromptService promptService;  // 用于获取提示词内容
+    private PromptService promptService;
+
+    @Autowired
+    private ModelConfigRepository modelConfigRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
-     * 发送消息，携带可选的提示词ID
+     * 发送消息，必须指定模型配置ID
      * @param conversationId 会话ID
      * @param userMessage 用户消息
      * @param promptId 提示词ID（可为null）
+     * @param modelConfigId 模型配置ID（必须指定，不能为null）
      * @return AI回复
      */
-    public String chatAndSave(Long conversationId, String userMessage, Long promptId) {
-        // 1. 获取该会话的历史消息（正序，最多30条）
+    public String chatAndSave(Long conversationId, String userMessage, Long promptId, Long modelConfigId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("会话不存在"));
+
+        if (modelConfigId == null) {
+            throw new RuntimeException("请先选择模型配置");
+        }
+
+        ModelConfig config = modelConfigRepository.findById(modelConfigId)
+                .orElseThrow(() -> new RuntimeException("模型配置不存在"));
+
         List<ChatMessage> history = chatMessageRepository
                 .findByConversationIdOrderByTimestampAsc(conversationId);
         if (history.size() > 30) {
             history = history.subList(history.size() - 30, history.size());
         }
 
-        // 2. 构建 messages 数组
         ArrayNode messagesArray = objectMapper.createArrayNode();
 
-        // 2a. 如果指定了提示词，先插入 system 角色消息
         if (promptId != null) {
             try {
                 Prompt prompt = promptService.getPromptById(promptId);
@@ -66,12 +75,10 @@ public class ChatService {
                 systemNode.put("role", "system");
                 systemNode.put("content", prompt.getContent());
             } catch (Exception e) {
-                // 提示词不存在或无权访问时忽略，不影响正常对话
                 System.err.println("提示词加载失败: " + e.getMessage());
             }
         }
 
-        // 2b. 添加历史消息（user + assistant 成对）
         for (ChatMessage msg : history) {
             ObjectNode userNode = messagesArray.addObject();
             userNode.put("role", "user");
@@ -82,18 +89,14 @@ public class ChatService {
             assistantNode.put("content", msg.getAiReply());
         }
 
-        // 2c. 添加当前用户消息
         ObjectNode currentUserNode = messagesArray.addObject();
         currentUserNode.put("role", "user");
         currentUserNode.put("content", userMessage);
 
-        // 3. 调用AI API
-        String reply = callDeepSeek(messagesArray);
+        String reply = callDeepSeek(messagesArray, config);
 
-        // 4. 保存消息到数据库
         chatHistoryService.saveMessage(conversationId, userMessage, reply);
 
-        // 5. 更新会话标题（您已实现的方法）
         updateConversationTitleIfNeeded(conversationId, userMessage);
 
         return reply;
@@ -118,22 +121,23 @@ public class ChatService {
         }
     }
 
-    /**
-     * 调用DeepSeek API
-     */
-    private String callDeepSeek(ArrayNode messages) {
+    private String callDeepSeek(ArrayNode messages, ModelConfig config) {
+        String apiUrl = config.getApiUrl();
+        String apiKey = config.getApiKey();
+        String modelName = config.getModelName();
+
         ObjectNode requestBody = objectMapper.createObjectNode();
-        requestBody.put("model", "deepseek-chat");
+        requestBody.put("model", modelName);
         requestBody.set("messages", messages);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(deepSeekConfig.getApiKey());
+        headers.setBearerAuth(apiKey);
 
         HttpEntity<String> entity = new HttpEntity<>(requestBody.toString(), headers);
         try {
             ResponseEntity<String> response = restTemplate.exchange(
-                    deepSeekConfig.getApiUrl(),
+                    apiUrl,
                     HttpMethod.POST,
                     entity,
                     String.class
@@ -146,5 +150,3 @@ public class ChatService {
         }
     }
 }
-
-

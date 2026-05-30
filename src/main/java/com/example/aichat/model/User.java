@@ -18,5 +18,8 @@ public class User {
     private String username;
 
     @Column(nullable = false)
-    private String password; // 加密后的密码
+    private String password;
+
+    @Column(nullable = false, unique = true, length = 6)
+    private String pid;
 }

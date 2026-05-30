@@ -28,13 +28,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String token = extractToken(request);
+        System.out.println("JWT过滤器 - 请求路径: " + request.getRequestURI());
+        System.out.println("JWT过滤器 - Token: " + (token != null ? "存在" : "不存在"));
+        
         if (StringUtils.hasText(token) && jwtUtil.validateToken(token)) {
             Long userId = jwtUtil.getUserIdFromToken(token);
+            System.out.println("JWT过滤器 - 用户ID: " + userId);
             // 创建一个认证对象，放入SecurityContext
             UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(userId, null, null);
             authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authentication);
+            System.out.println("JWT过滤器 - 认证成功");
+        } else {
+            System.out.println("JWT过滤器 - Token无效或不存在");
         }
         filterChain.doFilter(request, response);
     }

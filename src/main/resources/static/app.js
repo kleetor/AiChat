@@ -5,6 +5,7 @@
     let username = localStorage.getItem('chat_username') || '';
     let currentConvId = null;          // 当前选中的会话ID
     let currentPromptId = null;        // 当前选中的提示词ID
+    let currentModelConfigId = null;   // 当前选中的模型配置ID
 
     // DOM 元素
     const userDisplay = document.getElementById('userDisplay');
@@ -16,9 +17,13 @@
     const userInput = document.getElementById('userInput');
     const sendBtn = document.getElementById('sendBtn');
     const btnPrompt = document.getElementById('btnPrompt');
+    const btnModel = document.getElementById('btnModel');
     const currentPromptIndicator = document.getElementById('currentPromptIndicator');
     const promptNameDisplay = document.getElementById('promptNameDisplay');
     const removePromptBtn = document.getElementById('removePromptBtn');
+    const currentModelIndicator = document.getElementById('currentModelIndicator');
+    const modelNameDisplay = document.getElementById('modelNameDisplay');
+    const removeModelBtn = document.getElementById('removeModelBtn');
 
     // 模态框元素
     const authModal = document.getElementById('authModal');
@@ -40,6 +45,39 @@
     const savePromptBtn = document.getElementById('savePromptBtn');
     const cancelEditPrompt = document.getElementById('cancelEditPrompt');
 
+    // 模型相关元素
+    const modelModal = document.getElementById('modelModal');
+    const modelList = document.getElementById('modelList');
+    const closeModelModalBtn = document.getElementById('closeModelModalBtn');
+
+    // 设置相关元素
+    const btnSettings = document.getElementById('btnSettings');
+    const settingsModal = document.getElementById('settingsModal');
+    const settingsTabs = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+    const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+    
+    // 设置表单元素
+    const settingsUsername = document.getElementById('settingsUsername');
+    const settingsPid = document.getElementById('settingsPid');
+    
+    // 密码修改相关元素
+    const btnChangePassword = document.getElementById('btnChangePassword');
+    const verifyPasswordModal = document.getElementById('verifyPasswordModal');
+    const verifyCurrentPassword = document.getElementById('verifyCurrentPassword');
+    const verifyPasswordBtn = document.getElementById('verifyPasswordBtn');
+    const cancelVerifyPassword = document.getElementById('cancelVerifyPassword');
+    const verifyPasswordError = document.getElementById('verifyPasswordError');
+    
+    const newPasswordModal = document.getElementById('newPasswordModal');
+    const newPassword = document.getElementById('newPassword');
+    const confirmPassword = document.getElementById('confirmPassword');
+    const saveNewPasswordBtn = document.getElementById('saveNewPasswordBtn');
+    const cancelNewPassword = document.getElementById('cancelNewPassword');
+    const newPasswordError = document.getElementById('newPasswordError');
+    
+    let verifiedCurrentPassword = '';
+
     let isLoginMode = true;
     let editingPromptId = null;
 
@@ -48,8 +86,10 @@
         if (token) {
             showLoggedIn(username);
             loadConversations();
-            loadPromptsSilent(); // 加载但不显示，只用于恢复已选的提示词名称
+            loadPromptsSilent();
+            loadModelsSilent();
             restorePromptIndicator();
+            restoreModelIndicator();
         } else {
             showLoggedOut();
         }
@@ -59,7 +99,14 @@
         const savedPromptId = localStorage.getItem('current_prompt_id');
         if (savedPromptId) {
             currentPromptId = parseInt(savedPromptId);
-            // 名称将在 loadPromptsSilent 后更新
+        }
+    }
+
+    function restoreModelIndicator() {
+        const savedModelId = localStorage.getItem('current_model_config_id');
+        if (savedModelId) {
+            currentModelConfigId = parseInt(savedModelId);
+            loadModelsSilent();
         }
     }
 
@@ -70,6 +117,9 @@
         userDisplay.textContent = `👤 ${name}`;
         btnLogin.style.display = 'none';
         btnLogout.style.display = 'inline-block';
+        btnSettings.style.display = 'block';
+        btnPrompt.style.display = 'inline-block';
+        btnModel.style.display = 'inline-block';
         if (currentConvId) {
             enableInput(true);
         } else {
@@ -82,22 +132,35 @@
         localStorage.removeItem('chat_username');
         localStorage.removeItem('chat_token');
         localStorage.removeItem('current_prompt_id');
+        localStorage.removeItem('current_model_config_id');
         token = '';
         currentConvId = null;
         currentPromptId = null;
+        currentModelConfigId = null;
         currentPromptIndicator.style.display = 'none';
+        currentModelIndicator.style.display = 'none';
         userDisplay.textContent = '';
         btnLogin.style.display = 'inline-block';
         btnLogout.style.display = 'none';
+        btnSettings.style.display = 'none';
+        btnPrompt.style.display = 'none';
+        btnModel.style.display = 'none';
         userInput.disabled = true;
         sendBtn.disabled = true;
+        userInput.placeholder = '请先登录并选择模型配置...';
         convList.innerHTML = '<div class="no-conv">请登录</div>';
-        msgContainer.innerHTML = `<div class="welcome" id="welcomeMsg"><h2>👋 欢迎</h2><p>请登录后使用。</p></div>`;
+        msgContainer.innerHTML = `<div class="welcome" id="welcomeMsg"><h2>👋 欢迎</h2><p>请登录后选择或新建一个会话，然后选择AI模型开始对话。</p></div>`;
     }
 
     function enableInput(enabled) {
-        userInput.disabled = !enabled;
-        sendBtn.disabled = !enabled;
+        const hasModel = currentModelConfigId !== null;
+        userInput.disabled = !enabled || !hasModel;
+        sendBtn.disabled = !enabled || !hasModel;
+        if (!hasModel) {
+            userInput.placeholder = '请先选择模型配置...';
+        } else {
+            userInput.placeholder = '输入消息...';
+        }
     }
 
     // ======== 登录/注册模态框 ========
@@ -150,6 +213,7 @@
             closeAuthModal();
             loadConversations();
             loadPromptsSilent();
+            loadModelsSilent();
         } catch (e) {
             showModalError('网络错误');
         }
@@ -167,6 +231,7 @@
         localStorage.removeItem('chat_token');
         localStorage.removeItem('chat_username');
         localStorage.removeItem('current_prompt_id');
+        localStorage.removeItem('current_model_config_id');
         showLoggedOut();
     }
 
@@ -252,7 +317,11 @@
             const messages = data.messages || [];
             msgContainer.innerHTML = '';
             if (messages.length === 0) {
-                msgContainer.innerHTML = `<div class="welcome"><h2>新会话</h2><p>开始你的第一句话吧。</p></div>`;
+                if (currentModelConfigId) {
+                    msgContainer.innerHTML = `<div class="welcome"><h2>新会话</h2><p>开始你的第一句话吧。</p></div>`;
+                } else {
+                    msgContainer.innerHTML = `<div class="welcome"><h2>请先选择模型</h2><p>点击上方"🤖 模型"按钮选择AI模型后再开始对话。</p></div>`;
+                }
             } else {
                 messages.forEach(msg => {
                     appendMsg('user', msg.userMessage);
@@ -295,6 +364,7 @@
         try {
             const body = { message: text };
             if (currentPromptId) body.promptId = currentPromptId;
+            if (currentModelConfigId) body.modelConfigId = currentModelConfigId;
             const res = await fetch(API + `/api/chat/${currentConvId}`, {
                 method: 'POST',
                 headers: {
@@ -356,7 +426,6 @@
                     promptNameDisplay.textContent = p.name;
                     currentPromptIndicator.style.display = 'inline-flex';
                 } else {
-                    // 已删除
                     currentPromptId = null;
                     localStorage.removeItem('current_prompt_id');
                     currentPromptIndicator.style.display = 'none';
@@ -443,12 +512,10 @@
     function selectPrompt(id) {
         currentPromptId = id;
         localStorage.setItem('current_prompt_id', id);
-        // 立即更新显示名称
         const card = promptList.querySelector(`.prompt-card[data-id="${id}"]`);
         if (card) {
             promptNameDisplay.textContent = card.querySelector('.card-name').textContent;
         } else {
-            // 如果列表已经关闭，则从后台获取
             loadPromptsSilent();
         }
         currentPromptIndicator.style.display = 'inline-flex';
@@ -461,7 +528,6 @@
                 promptNameDisplay.textContent = card.querySelector('.card-name').textContent;
                 currentPromptIndicator.style.display = 'inline-flex';
             } else {
-                // 可能已删除或未加载，尝试静默加载
                 loadPromptsSilent();
             }
         } else {
@@ -509,7 +575,6 @@
             if (res.ok) {
                 editPromptModal.classList.remove('show');
                 loadPrompts();
-                // 如果当前使用的提示词被编辑并保存，更新指示器名称
                 if (editingPromptId && editingPromptId === currentPromptId) {
                     promptNameDisplay.textContent = name;
                 }
@@ -520,5 +585,291 @@
         } catch(e) { alert('网络错误'); }
     });
 
+    // ======== 模型配置管理 ========
+    btnModel.addEventListener('click', () => {
+        loadModels();
+        modelModal.classList.add('show');
+    });
+
+    closeModelModalBtn.addEventListener('click', () => modelModal.classList.remove('show'));
+
+    async function loadModelsSilent() {
+        if (!token) return;
+        try {
+            const res = await fetch(API + '/api/model-configs', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (!res.ok) return;
+            const models = await res.json();
+            if (currentModelConfigId) {
+                const m = models.find(x => x.id === currentModelConfigId);
+                if (m) {
+                    modelNameDisplay.textContent = m.modelName;
+                    currentModelIndicator.style.display = 'inline-flex';
+                } else {
+                    currentModelConfigId = null;
+                    localStorage.removeItem('current_model_config_id');
+                    currentModelIndicator.style.display = 'none';
+                }
+            }
+        } catch(e) { /* ignore */ }
+    }
+
+    async function loadModels() {
+        if (!token) { modelList.innerHTML = '<div class="prompt-empty">请先登录</div>'; return; }
+        try {
+            const res = await fetch(API + '/api/model-configs', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (!res.ok) { if (res.status===401) logout(); return; }
+            const models = await res.json();
+            renderModels(models);
+        } catch(e) { console.error(e); }
+    }
+
+    function renderModels(models) {
+        if (!models || models.length === 0) {
+            modelList.innerHTML = '<div class="prompt-empty">暂无模型配置</div>';
+            return;
+        }
+        let html = '';
+        models.forEach(m => {
+            const isActive = currentModelConfigId === m.id;
+            html += `<div class="prompt-card" data-id="${m.id}">
+                        <div class="card-header">
+                            <span class="card-name">${escapeHtml(m.modelName)}</span>
+                        </div>
+                        <div class="card-content">
+                            <div><strong>API URL:</strong> ${escapeHtml(m.apiUrl)}</div>
+                        </div>
+                        <button class="card-use-btn ${isActive?'active':''}" data-id="${m.id}">
+                            ${isActive ? '✓ 使用中' : '使用'}
+                        </button>
+                    </div>`;
+        });
+        modelList.innerHTML = html;
+
+        // 绑定使用事件
+        document.querySelectorAll('.card-use-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const id = parseInt(this.dataset.id);
+                selectModel(id);
+                modelModal.classList.remove('show');
+            });
+        });
+    }
+
+    function selectModel(id) {
+        currentModelConfigId = id;
+        localStorage.setItem('current_model_config_id', id);
+        const card = modelList.querySelector(`.prompt-card[data-id="${id}"]`);
+        if (card) {
+            modelNameDisplay.textContent = card.querySelector('.card-name').textContent;
+        } else {
+            loadModelsSilent();
+        }
+        currentModelIndicator.style.display = 'inline-flex';
+        
+        if (currentConvId) {
+            enableInput(true);
+            const welcomeMsg = msgContainer.querySelector('.welcome');
+            if (welcomeMsg) {
+                welcomeMsg.innerHTML = `<h2>新会话</h2><p>开始你的第一句话吧。</p>`;
+            }
+        } else {
+            enableInput(false);
+        }
+    }
+
+    function updateModelIndicator() {
+        if (currentModelConfigId) {
+            const card = modelList.querySelector(`.prompt-card[data-id="${currentModelConfigId}"]`);
+            if (card) {
+                modelNameDisplay.textContent = card.querySelector('.card-name').textContent;
+                currentModelIndicator.style.display = 'inline-flex';
+            } else {
+                loadModelsSilent();
+            }
+        } else {
+            currentModelIndicator.style.display = 'none';
+        }
+    }
+
+    removeModelBtn.addEventListener('click', function() {
+        currentModelConfigId = null;
+        localStorage.removeItem('current_model_config_id');
+        currentModelIndicator.style.display = 'none';
+        enableInput(false);
+        userInput.placeholder = '请先选择模型配置...';
+    });
+    
+    // ======== 设置功能 ========
+    btnSettings.addEventListener('click', openSettingsModal);
+    closeSettingsBtn.addEventListener('click', closeSettingsModal);
+    
+    settingsTabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+            const tabId = this.dataset.tab;
+            settingsTabs.forEach(t => t.classList.remove('active'));
+            tabContents.forEach(c => c.classList.remove('active'));
+            this.classList.add('active');
+            document.getElementById(tabId + '-tab').classList.add('active');
+        });
+    });
+    
+    settingsModal.addEventListener('click', function(e) {
+        if (e.target === settingsModal) closeSettingsModal();
+    });
+    
+    function openSettingsModal() {
+        loadUserInfo();
+        settingsModal.classList.add('show');
+    }
+    
+    function closeSettingsModal() {
+        settingsModal.classList.remove('show');
+    }
+    
+    async function loadUserInfo() {
+        try {
+            const res = await fetch(API + '/api/auth/me', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (!res.ok) { 
+                if (res.status === 401) {
+                    logout(); 
+                    return; 
+                }
+                return;
+            }
+            const user = await res.json();
+            settingsUsername.textContent = user.username || '';
+            settingsPid.textContent = user.pid || '';
+        } catch(e) { 
+            console.error('加载用户信息失败', e); 
+        }
+    }
+    
+    // ======== 修改密码流程 ========
+    btnChangePassword.addEventListener('click', function() {
+        verifyCurrentPassword.value = '';
+        verifyPasswordError.classList.remove('show');
+        verifyPasswordModal.classList.add('show');
+    });
+    
+    cancelVerifyPassword.addEventListener('click', function() {
+        verifyPasswordModal.classList.remove('show');
+    });
+    
+    verifyPasswordModal.addEventListener('click', function(e) {
+        if (e.target === verifyPasswordModal) {
+            verifyPasswordModal.classList.remove('show');
+        }
+    });
+    
+    verifyPasswordBtn.addEventListener('click', async function() {
+        const currentPass = verifyCurrentPassword.value.trim();
+        
+        if (!currentPass) {
+            verifyPasswordError.textContent = '请输入当前密码';
+            verifyPasswordError.classList.add('show');
+            return;
+        }
+        
+        verifyPasswordError.classList.remove('show');
+        
+        try {
+            const res = await fetch(API + '/api/auth/verify-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify({ password: currentPass })
+            });
+            
+            if (res.ok) {
+                verifiedCurrentPassword = currentPass;
+                verifyPasswordModal.classList.remove('show');
+                newPassword.value = '';
+                confirmPassword.value = '';
+                newPasswordError.classList.remove('show');
+                newPasswordModal.classList.add('show');
+            } else {
+                const err = await res.text();
+                verifyPasswordError.textContent = err || '密码验证失败';
+                verifyPasswordError.classList.add('show');
+            }
+        } catch(e) {
+            verifyPasswordError.textContent = '网络错误';
+            verifyPasswordError.classList.add('show');
+        }
+    });
+    
+    cancelNewPassword.addEventListener('click', function() {
+        newPasswordModal.classList.remove('show');
+        verifiedCurrentPassword = '';
+    });
+    
+    newPasswordModal.addEventListener('click', function(e) {
+        if (e.target === newPasswordModal) {
+            newPasswordModal.classList.remove('show');
+            verifiedCurrentPassword = '';
+        }
+    });
+    
+    saveNewPasswordBtn.addEventListener('click', async function() {
+        const newPass = newPassword.value.trim();
+        const confirmPass = confirmPassword.value.trim();
+        
+        if (!newPass || !confirmPass) {
+            newPasswordError.textContent = '请填写所有字段';
+            newPasswordError.classList.add('show');
+            return;
+        }
+        
+        if (newPass.length < 6) {
+            newPasswordError.textContent = '新密码长度至少6位';
+            newPasswordError.classList.add('show');
+            return;
+        }
+        
+        if (newPass !== confirmPass) {
+            newPasswordError.textContent = '两次输入的密码不一致';
+            newPasswordError.classList.add('show');
+            return;
+        }
+        
+        newPasswordError.classList.remove('show');
+        
+        try {
+            const res = await fetch(API + '/api/auth/change-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify({
+                    currentPassword: verifiedCurrentPassword,
+                    newPassword: newPass
+                })
+            });
+            
+            if (res.ok) {
+                alert('密码修改成功，请重新登录');
+                newPasswordModal.classList.remove('show');
+                verifiedCurrentPassword = '';
+                logout();
+            } else {
+                const err = await res.text();
+                newPasswordError.textContent = err || '密码修改失败';
+                newPasswordError.classList.add('show');
+            }
+        } catch(e) {
+            newPasswordError.textContent = '网络错误';
+            newPasswordError.classList.add('show');
+        }
+    });
+    
     // ======== 启动 ========
     init();

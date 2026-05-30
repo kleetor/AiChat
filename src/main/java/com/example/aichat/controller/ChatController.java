@@ -37,8 +37,8 @@ public class ChatController {
         if (!conversationService.belongsToUser(conversationId, userId)) {
             return ResponseEntity.status(403).build();
         }
-        // 传入 promptId
-        String reply = chatService.chatAndSave(conversationId, request.getMessage(), request.getPromptId());
+        String reply = chatService.chatAndSave(conversationId, request.getMessage(),
+                request.getPromptId(), request.getModelConfigId());
         ChatResponse response = new ChatResponse();
         response.setReply(reply);
         return ResponseEntity.ok(response);
