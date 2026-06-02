@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 聊天 - 提示词管理</title>
+    <link rel="stylesheet" th:href="@{/app.css}">
+</head>
+<body>
+
+<div class="app-container">
+    <!-- 头部 -->
+    <div class="header">
+        <h1>💬 AI 聊天</h1>
+        <div class="user-info">
+            <!-- 当前提示词指示器 -->
+            <span id="currentPromptIndicator" class="current-prompt-indicator">
+                <span id="promptNameDisplay"></span>
+                <button id="removePromptBtn" class="remove-prompt">&times;</button>
+            </span>
+            <!-- 当前模型指示器 -->
+            <span id="currentModelIndicator" class="current-model-indicator">
+                <span id="modelNameDisplay">默认模型</span>
+                <button id="removeModelBtn" class="remove-prompt">&times;</button>
+            </span>
+            <!-- 联网搜索开关 -->
+            <label class="search-toggle">
+                <input type="checkbox" id="webSearchToggle">
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">🌐 联网搜索</span>
+            </label>
+            <span id="userDisplay"></span>
+            <button id="btnPrompt" class="auth-btn">📝 提示词</button>
+            <button id="btnModel" class="auth-btn">🤖 模型</button>
+            <button id="btnLogin" class="auth-btn">登录</button>
+            <button id="btnLogout" class="auth-btn btn-logout">退出</button>
+        </div>
+    </div>
+
+    <!-- 主体 -->
+    <div class="main-area">
+        <!-- 侧边栏会话 -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h3>💬 会话</h3>
+                <button id="newConvBtn">＋ 新建</button>
+            </div>
+            <div class="conversation-list" id="convList"></div>
+            <div class="sidebar-footer">
+                <button id="btnSettings" class="settings-btn">⚙️ 设置</button>
+            </div>
+        </div>
+
+        <!-- 聊天区 -->
+        <div class="chat-area">
+            <div class="messages" id="msgContainer">
+                <div class="welcome" id="welcomeMsg">
+                    <h2>👋 欢迎使用</h2>
+                    <p>请登录后选择或新建一个会话，然后选择AI模型开始对话。</p>
+                </div>
+            </div>
+            <div class="input-area">
+                <input type="text" id="userInput" placeholder="请先登录并选择模型配置..." disabled>
+                <button id="sendBtn" disabled>发送</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 登录/注册模态框 -->
+<div class="modal-overlay" id="authModal">
+    <div class="modal">
+        <h2 id="modalTitle">登录</h2>
+        <div class="form-group">
+            <label>用户名</label>
+            <input type="text" id="modalUsername" placeholder="请输入用户名">
+        </div>
+        <div class="form-group">
+            <label>密码</label>
+            <input type="password" id="modalPassword" placeholder="请输入密码">
+        </div>
+        <div id="modalError" class="error-msg">错误</div>
+        <button class="btn-primary" id="modalSubmit">登录</button>
+        <div class="switch">
+            <span id="switchText">还没有账号？<a id="switchLink">注册</a></span>
+        </div>
+    </div>
+</div>
+
+<!-- 提示词管理模态框 -->
+<div class="modal-overlay prompt-modal" id="promptModal">
+    <div class="modal">
+        <h2>📝 自定义提示词</h2>
+        <div class="prompt-list" id="promptList"></div>
+        <button class="new-prompt-btn" id="newPromptBtn">＋ 新建提示词</button>
+        <div style="text-align:right;margin-top:12px;">
+            <button class="btn-primary" style="width:auto;padding:8px 20px;" id="closePromptModalBtn">关闭</button>
+        </div>
+    </div>
+</div>
+
+<!-- 新建/编辑提示词模态框 -->
+<div class="modal-overlay" id="editPromptModal">
+    <div class="modal">
+        <h2 id="editPromptTitle">新建提示词</h2>
+        <div class="form-group">
+            <label>名称</label>
+            <input type="text" id="editPromptName" placeholder="输入名称">
+        </div>
+        <div class="form-group">
+            <label>内容 (System Prompt)</label>
+            <textarea id="editPromptContent" rows="5" placeholder="请输入系统提示词内容..."></textarea>
+        </div>
+        <button class="btn-primary" id="savePromptBtn">保存</button>
+        <div style="text-align:center;margin-top:12px;">
+            <a id="cancelEditPrompt" style="color:#6b7280;cursor:pointer;">取消</a>
+        </div>
+    </div>
+</div>
+
+<!-- 模型选择模态框 -->
+<div class="modal-overlay prompt-modal" id="modelModal">
+    <div class="modal">
+        <h2>🤖 选择模型</h2>
+        <div class="model-list" id="modelList"></div>
+        <div style="text-align:right;margin-top:12px;">
+            <button class="btn-primary" style="width:auto;padding:8px 20px;" id="closeModelModalBtn">关闭</button>
+        </div>
+    </div>
+</div>
+
+<!-- 设置模态框 -->
+<div class="modal-overlay" id="settingsModal">
+    <div class="modal" style="max-width: 500px;">
+        <h2>⚙️ 设置</h2>
+
+        <!-- 设置标签页 -->
+        <div class="settings-tabs">
+            <button class="tab-btn active" data-tab="profile">👤 个人信息</button>
+        </div>
+
+        <!-- 个人信息标签 -->
+        <div class="tab-content active" id="profile-tab">
+            <div class="profile-info">
+                <div class="info-row">
+                    <span class="info-label">用户名</span>
+                    <span class="info-value" id="settingsUsername"></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">用户PID</span>
+                    <span class="info-value" id="settingsPid"></span>
+                </div>
+            </div>
+            <button class="change-password-btn" id="btnChangePassword">🔒 修改密码</button>
+        </div>
+
+        <div class="settings-actions">
+            <button class="btn-secondary" id="closeSettingsBtn">关闭</button>
+        </div>
+    </div>
+</div>
+
+<!-- 修改密码模态框 - 第一步：验证原密码 -->
+<div class="modal-overlay" id="verifyPasswordModal">
+    <div class="modal" style="max-width: 400px;">
+        <h2>🔒 验证原密码</h2>
+        <div class="form-group">
+            <label>请输入当前密码</label>
+            <input type="password" id="verifyCurrentPassword" placeholder="请输入当前密码">
+        </div>
+        <button class="btn-primary" id="verifyPasswordBtn">验证</button>
+        <div style="text-align:center;margin-top:12px;">
+            <a id="cancelVerifyPassword" style="color:#6b7280;cursor:pointer;">取消</a>
+        </div>
+        <div id="verifyPasswordError" class="error-msg"></div>
+    </div>
+</div>
+
+<!-- 修改密码模态框 - 第二步：设置新密码 -->
+<div class="modal-overlay" id="newPasswordModal">
+    <div class="modal" style="max-width: 400px;">
+        <h2>🔑 设置新密码</h2>
+        <div class="form-group">
+            <label>新密码</label>
+            <input type="password" id="newPassword" placeholder="请输入新密码（至少6位）">
+        </div>
+        <div class="form-group">
+            <label>确认新密码</label>
+            <input type="password" id="confirmPassword" placeholder="请再次输入新密码">
+        </div>
+        <button class="btn-primary" id="saveNewPasswordBtn">确认修改</button>
+        <div style="text-align:center;margin-top:12px;">
+            <a id="cancelNewPassword" style="color:#6b7280;cursor:pointer;">取消</a>
+        </div>
+        <div id="newPasswordError" class="error-msg"></div>
+    </div>
+</div>
+<script th:src="@{/app.js}"></script>
+</body>
+</html>
