@@ -24,6 +24,10 @@
     const currentModelIndicator = document.getElementById('currentModelIndicator');
     const modelNameDisplay = document.getElementById('modelNameDisplay');
     const removeModelBtn = document.getElementById('removeModelBtn');
+    
+    // 联网搜索开关
+    const webSearchToggle = document.getElementById('webSearchToggle');
+    const searchToggleLabel = document.querySelector('.search-toggle');
 
     // 模态框元素
     const authModal = document.getElementById('authModal');
@@ -120,6 +124,7 @@
         btnSettings.style.display = 'block';
         btnPrompt.style.display = 'inline-block';
         btnModel.style.display = 'inline-block';
+        searchToggleLabel.classList.add('visible');
         if (currentConvId) {
             enableInput(true);
         } else {
@@ -139,6 +144,8 @@
         currentModelConfigId = null;
         currentPromptIndicator.style.display = 'none';
         currentModelIndicator.style.display = 'none';
+        searchToggleLabel.classList.remove('visible');
+        webSearchToggle.checked = false;
         userDisplay.textContent = '';
         btnLogin.style.display = 'inline-block';
         btnLogout.style.display = 'none';
@@ -368,6 +375,7 @@
             const body = { message: text };
             if (currentPromptId) body.promptId = currentPromptId;
             if (currentModelConfigId) body.modelConfigId = currentModelConfigId;
+            body.webSearchEnabled = webSearchToggle.checked;
             const res = await fetch(API + `/api/chat/${currentConvId}/stream`, {
                 method: 'POST',
                 headers: {

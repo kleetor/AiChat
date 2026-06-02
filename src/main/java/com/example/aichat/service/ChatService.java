@@ -54,9 +54,16 @@ public class ChatService {
     @Autowired
     private ModelConfigRepository modelConfigRepository;
 
+    @Autowired
+    private SearchService searchService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public String chatAndSave(Long conversationId, String userMessage, Long promptId, Long modelConfigId) {
+        return chatAndSave(conversationId, userMessage, promptId, modelConfigId, false);
+    }
+
+    public String chatAndSave(Long conversationId, String userMessage, Long promptId, Long modelConfigId, boolean webSearchEnabled) {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("会话不存在"));
 
@@ -94,6 +101,17 @@ public class ChatService {
             ObjectNode assistantNode = messagesArray.addObject();
             assistantNode.put("role", "assistant");
             assistantNode.put("content", msg.getAiReply());
+        }
+
+        if (webSearchEnabled) {
+            try {
+                String searchResults = searchService.searchAsMarkdown(userMessage, 5);
+                ObjectNode searchContextNode = messagesArray.addObject();
+                searchContextNode.put("role", "system");
+                searchContextNode.put("content", "最新搜索信息：\n" + searchResults);
+            } catch (Exception e) {
+                System.err.println("联网搜索失败: " + e.getMessage());
+            }
         }
 
         ObjectNode currentUserNode = messagesArray.addObject();
@@ -113,6 +131,10 @@ public class ChatService {
      * 流式聊天：使用 Spring 官方 SseEmitter，自动处理缓冲、心跳、客户端断开等
      */
     public SseEmitter chatStream(Long conversationId, String userMessage, Long promptId, Long modelConfigId) {
+        return chatStream(conversationId, userMessage, promptId, modelConfigId, false);
+    }
+
+    public SseEmitter chatStream(Long conversationId, String userMessage, Long promptId, Long modelConfigId, boolean webSearchEnabled) {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("会话不存在"));
 
@@ -152,6 +174,17 @@ public class ChatService {
             assistantNode.put("content", msg.getAiReply());
         }
 
+        if (webSearchEnabled) {
+            try {
+                String searchResults = searchService.searchAsMarkdown(userMessage, 5);
+                ObjectNode searchContextNode = messagesArray.addObject();
+                searchContextNode.put("role", "system");
+                searchContextNode.put("content", "最新搜索信息：\n" + searchResults);
+            } catch (Exception e) {
+                System.err.println("联网搜索失败: " + e.getMessage());
+            }
+        }
+
         ObjectNode currentUserNode = messagesArray.addObject();
         currentUserNode.put("role", "user");
         currentUserNode.put("content", userMessage);
@@ -160,7 +193,6 @@ public class ChatService {
     }
 
     private SseEmitter streamDeepSeek(ArrayNode messages, ModelConfig config, Long conversationId, String userMessage) {
-        // 超时 2 分钟
         SseEmitter emitter = new SseEmitter(120_000L);
         String apiUrl = config.getApiUrl();
         String apiKey = config.getApiKey();
@@ -222,7 +254,6 @@ public class ChatService {
                         StringBuilder chunkBuf = new StringBuilder();
                         String line;
                         int eventCount = 0;
-                        // 控制流式节奏：攒到 3-6 个字/字符才发一次，每次发送后等待一小段时间，模拟打字感
                         final int flushEvery = 4;
                         final long sleepMs = 50;
                         int sinceLastFlush = 0;
@@ -271,10 +302,8 @@ public class ChatService {
                                     }
                                 }
                             } catch (Exception e) {
-                                // 忽略单行解析错误
                             }
                         }
-                        // 把最后不足 flush 尾发送出去
                         if (chunkBuf.length() > 0) {
                             try {
                                 emitter.send(SseEmitter.event()
@@ -308,8 +337,6 @@ public class ChatService {
             }
         };
 
-        // 异步执行流式任务，避免阻塞当前请求线程
-        // 使用单个独立线程，保证每个请求独立
         new Thread(task, "chat-stream-" + conversationId).start();
         return emitter;
     }
@@ -330,9 +357,6 @@ public class ChatService {
         }
     }
 
-    /**
-     * 判断文本中是否包含句子/段落级别的标点，用于在流式输出时制造更自然的节奏。
-     */
     private static boolean containsSentenceEnd(String text) {
         if (text == null) return false;
         for (int i = 0; i < text.length(); i++) {

@@ -68,14 +68,7 @@ mvn spring-boot:run
 - `PUT /api/prompts/{id}` - 更新提示词
 - `DELETE /api/prompts/{id}` - 删除提示词
 
-### 模型配置
-
-- `GET /api/model-configs` - 配置列表
-- `POST /api/model-configs` - 创建配置
-- `PUT /api/model-configs/{id}` - 更新配置
-- `DELETE /api/model-configs/{id}` - 删除配置
-
-## 数据库表
+# 数据库表
 
 - `users` - 用户表
 - `conversations` - 会话表
@@ -89,7 +82,9 @@ mvn spring-boot:run
 2. 后台系统
 3. 更多模型支持 ✅️
 4. 计费系统
-5. 对话数据导出
-6. 前端页面优化
-7. 提示词社区
+5. 前端页面优化
+6. 提示词社区
+7. 联网搜索（test） ✅️ 
+8. 文件与图片上传
+9. 用户系统
 

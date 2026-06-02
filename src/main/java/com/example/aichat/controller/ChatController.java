@@ -38,8 +38,9 @@ public class ChatController {
         if (!conversationService.belongsToUser(conversationId, userId)) {
             return ResponseEntity.status(403).build();
         }
+        boolean webSearchEnabled = Boolean.TRUE.equals(request.getWebSearchEnabled());
         String reply = chatService.chatAndSave(conversationId, request.getMessage(),
-                request.getPromptId(), request.getModelConfigId());
+                request.getPromptId(), request.getModelConfigId(), webSearchEnabled);
         ChatResponse response = new ChatResponse();
         response.setReply(reply);
         return ResponseEntity.ok(response);
@@ -55,11 +56,13 @@ public class ChatController {
             return ResponseEntity.status(403).build();
         }
 
+        boolean webSearchEnabled = Boolean.TRUE.equals(request.getWebSearchEnabled());
         SseEmitter emitter = chatService.chatStream(
                 conversationId,
                 request.getMessage(),
                 request.getPromptId(),
-                request.getModelConfigId()
+                request.getModelConfigId(),
+                webSearchEnabled
         );
 
         return ResponseEntity.ok()
