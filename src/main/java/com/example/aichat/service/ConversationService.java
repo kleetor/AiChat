@@ -3,7 +3,6 @@ package com.example.aichat.service;
 
 import com.example.aichat.model.Conversation;
 import com.example.aichat.model.User;
-import com.example.aichat.repository.ChatMessageRepository;
 import com.example.aichat.repository.ConversationRepository;
 import com.example.aichat.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,9 +16,6 @@ public class ConversationService {
 
     @Autowired
     private ConversationRepository conversationRepository;
-
-    @Autowired
-    private ChatMessageRepository chatMessageRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -43,7 +39,6 @@ public class ConversationService {
     // 删除会话及其所有消息
     @Transactional
     public void deleteConversation(Long conversationId) {
-        chatMessageRepository.deleteByConversationId(conversationId);
         conversationRepository.deleteById(conversationId);
     }
 

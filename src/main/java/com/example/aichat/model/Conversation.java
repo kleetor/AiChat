@@ -1,9 +1,12 @@
 // model/Conversation.java
 package com.example.aichat.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "conversations")
@@ -18,12 +21,17 @@ public class Conversation {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnore
     private User user;
 
-    @Column(name = "title", length = 255)
-    private String title; // 可选：会话标题（可用第一条消息摘要）
+    @OneToMany(mappedBy = "conversation", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    @Builder.Default
+    private List<ChatMessage> messages = new ArrayList<>();
 
-    // 修改 createdAt 字段
+    @Column(name = "title", length = 255)
+    private String title;
+
     @Column(name = "created_at", nullable = false, columnDefinition = "DATETIME")
     private LocalDateTime createdAt;
 

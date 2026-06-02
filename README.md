@@ -28,42 +28,48 @@
 ### 启动步骤
 
 1. 创建数据库
+
 ```sql
 CREATE DATABASE ai_chat_db;
 ```
 
-2. 配置 `application.properties` 中的数据库连接
+1. 配置 `application.properties` 中的数据库连接
+2. 启动应用
 
-3. 启动应用
 ```bash
 mvn spring-boot:run
 ```
 
-4. 访问 `http://localhost:8080`
+1. 访问 `http://localhost:8080`
 
 ## API 接口
 
 ### 认证
+
 - `POST /api/auth/register` - 注册
 - `POST /api/auth/login` - 登录
 - `GET /api/auth/me` - 获取用户信息
 
 ### 会话
+
 - `GET /api/conversations` - 会话列表
 - `POST /api/conversations` - 创建会话
 - `DELETE /api/conversations/{id}` - 删除会话
 
 ### 聊天
+
 - `POST /api/chat/send` - 发送消息
 - `GET /api/chat/{id}/history` - 历史记录
 
 ### 提示词
+
 - `GET /api/prompts` - 提示词列表
 - `POST /api/prompts` - 创建提示词
 - `PUT /api/prompts/{id}` - 更新提示词
 - `DELETE /api/prompts/{id}` - 删除提示词
 
 ### 模型配置
+
 - `GET /api/model-configs` - 配置列表
 - `POST /api/model-configs` - 创建配置
 - `PUT /api/model-configs/{id}` - 更新配置
@@ -79,10 +85,11 @@ mvn spring-boot:run
 
 ## 未来计划
 
-1. 流式响应和输出
+1. 流式响应 ✅️
 2. 后台系统
-3. 更多模型支持
+3. 更多模型支持 ✅️
 4. 计费系统
 5. 对话数据导出
 6. 前端页面优化
 7. 提示词社区
+

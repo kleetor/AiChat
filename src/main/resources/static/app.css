@@ -115,6 +115,7 @@
         .info-value { font-size: 14px; font-weight: 500; color: #1f2937; }
         
         /* 模型列表样式 */
+        .model-list { flex: 1; overflow-y: auto; margin-bottom: 16px; max-height: calc(80vh - 150px); }
         .model-list .prompt-card .card-content { font-size: 12px; }
         .model-list .prompt-card .card-content div { margin-bottom: 4px; }
         

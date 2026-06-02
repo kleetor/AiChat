@@ -15,8 +15,23 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
+import org.apache.hc.core5.http.io.entity.StringEntity;
+import org.apache.hc.core5.util.Timeout;
 
 @Service
 public class ChatService {
@@ -41,14 +56,6 @@ public class ChatService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    /**
-     * 发送消息，必须指定模型配置ID
-     * @param conversationId 会话ID
-     * @param userMessage 用户消息
-     * @param promptId 提示词ID（可为null）
-     * @param modelConfigId 模型配置ID（必须指定，不能为null）
-     * @return AI回复
-     */
     public String chatAndSave(Long conversationId, String userMessage, Long promptId, Long modelConfigId) {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("会话不存在"));
@@ -103,8 +110,210 @@ public class ChatService {
     }
 
     /**
-     * 如果会话标题是默认的"新对话"，则用用户消息的前15字更新
+     * 流式聊天：使用 Spring 官方 SseEmitter，自动处理缓冲、心跳、客户端断开等
      */
+    public SseEmitter chatStream(Long conversationId, String userMessage, Long promptId, Long modelConfigId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("会话不存在"));
+
+        if (modelConfigId == null) {
+            throw new RuntimeException("请先选择模型配置");
+        }
+
+        ModelConfig config = modelConfigRepository.findById(modelConfigId)
+                .orElseThrow(() -> new RuntimeException("模型配置不存在"));
+
+        List<ChatMessage> history = chatMessageRepository
+                .findByConversationIdOrderByTimestampAsc(conversationId);
+        if (history.size() > 30) {
+            history = history.subList(history.size() - 30, history.size());
+        }
+
+        ArrayNode messagesArray = objectMapper.createArrayNode();
+
+        if (promptId != null) {
+            try {
+                Prompt prompt = promptService.getPromptById(promptId);
+                ObjectNode systemNode = messagesArray.addObject();
+                systemNode.put("role", "system");
+                systemNode.put("content", prompt.getContent());
+            } catch (Exception e) {
+                System.err.println("提示词加载失败: " + e.getMessage());
+            }
+        }
+
+        for (ChatMessage msg : history) {
+            ObjectNode userNode = messagesArray.addObject();
+            userNode.put("role", "user");
+            userNode.put("content", msg.getUserMessage());
+
+            ObjectNode assistantNode = messagesArray.addObject();
+            assistantNode.put("role", "assistant");
+            assistantNode.put("content", msg.getAiReply());
+        }
+
+        ObjectNode currentUserNode = messagesArray.addObject();
+        currentUserNode.put("role", "user");
+        currentUserNode.put("content", userMessage);
+
+        return streamDeepSeek(messagesArray, config, conversationId, userMessage);
+    }
+
+    private SseEmitter streamDeepSeek(ArrayNode messages, ModelConfig config, Long conversationId, String userMessage) {
+        // 超时 2 分钟
+        SseEmitter emitter = new SseEmitter(120_000L);
+        String apiUrl = config.getApiUrl();
+        String apiKey = config.getApiKey();
+        String modelName = config.getModelName();
+
+        Runnable task = () -> {
+            try {
+                PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
+                connectionManager.setMaxTotal(50);
+                connectionManager.setDefaultMaxPerRoute(20);
+
+                RequestConfig requestConfig = RequestConfig.custom()
+                        .setResponseTimeout(Timeout.ofSeconds(120))
+                        .build();
+
+                try (CloseableHttpClient httpClient = HttpClients.custom()
+                        .setConnectionManager(connectionManager)
+                        .setDefaultRequestConfig(requestConfig)
+                        .build()) {
+
+                    ObjectNode requestBody = objectMapper.createObjectNode();
+                    requestBody.put("model", modelName);
+                    requestBody.put("stream", true);
+                    requestBody.set("messages", messages);
+
+                    HttpPost postRequest = new HttpPost(apiUrl);
+                    postRequest.setHeader("Content-Type", "application/json");
+                    postRequest.setHeader("Authorization", "Bearer " + apiKey);
+                    postRequest.setEntity(new StringEntity(requestBody.toString(), StandardCharsets.UTF_8));
+
+                    try (CloseableHttpResponse response = httpClient.execute(postRequest)) {
+                        int statusCode = response.getCode();
+                        if (statusCode >= 400) {
+                            String errorMsg = "AI 服务返回错误: HTTP " + statusCode;
+                            try {
+                                if (response.getEntity() != null) {
+                                    errorMsg += " - " + new String(
+                                            response.getEntity().getContent().readAllBytes(),
+                                            StandardCharsets.UTF_8);
+                                }
+                            } catch (Exception ignore) { }
+                            emitter.send(SseEmitter.event()
+                                    .name("error")
+                                    .data(errorMsg, MediaType.TEXT_PLAIN));
+                            emitter.complete();
+                            return;
+                        }
+
+                        if (response.getEntity() == null) {
+                            emitter.send("AI 服务无返回内容");
+                            emitter.complete();
+                            return;
+                        }
+
+                        BufferedReader reader = new BufferedReader(
+                                new InputStreamReader(response.getEntity().getContent(), StandardCharsets.UTF_8));
+
+                        StringBuilder fullResponse = new StringBuilder();
+                        StringBuilder chunkBuf = new StringBuilder();
+                        String line;
+                        int eventCount = 0;
+                        // 控制流式节奏：攒到 3-6 个字/字符才发一次，每次发送后等待一小段时间，模拟打字感
+                        final int flushEvery = 4;
+                        final long sleepMs = 50;
+                        int sinceLastFlush = 0;
+                        while ((line = reader.readLine()) != null) {
+                            if (line.trim().isEmpty()) {
+                                continue;
+                            }
+                            try {
+                                String payload = line;
+                                if (payload.startsWith("data:")) {
+                                    payload = payload.substring(5).trim();
+                                }
+                                if (payload.isEmpty()) {
+                                    continue;
+                                }
+                                if ("[DONE]".equals(payload)) {
+                                    break;
+                                }
+
+                                JsonNode root = objectMapper.readTree(payload);
+                                JsonNode choices = root.get("choices");
+                                if (choices != null && choices.isArray() && choices.size() > 0) {
+                                    JsonNode delta = choices.get(0).get("delta");
+                                    if (delta != null && delta.has("content")
+                                            && !delta.get("content").isNull()) {
+                                        String content = delta.get("content").asText();
+                                        if (content == null) continue;
+                                        fullResponse.append(content);
+                                        chunkBuf.append(content);
+                                        sinceLastFlush += content.length();
+                                        if (sinceLastFlush >= flushEvery
+                                                || containsSentenceEnd(content)) {
+                                            String toSend = chunkBuf.toString();
+                                            chunkBuf.setLength(0);
+                                            sinceLastFlush = 0;
+                                            emitter.send(SseEmitter.event()
+                                                    .id(String.valueOf(eventCount++))
+                                                    .data(toSend, MediaType.TEXT_PLAIN));
+                                            try {
+                                                Thread.sleep(sleepMs);
+                                            } catch (InterruptedException ie) {
+                                                Thread.currentThread().interrupt();
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (Exception e) {
+                                // 忽略单行解析错误
+                            }
+                        }
+                        // 把最后不足 flush 尾发送出去
+                        if (chunkBuf.length() > 0) {
+                            try {
+                                emitter.send(SseEmitter.event()
+                                        .id(String.valueOf(eventCount++))
+                                        .data(chunkBuf.toString(), MediaType.TEXT_PLAIN));
+                            } catch (Exception ignore) {
+                            }
+                        }
+                        reader.close();
+
+                        String completeResponse = fullResponse.toString();
+                        if (!completeResponse.isEmpty()) {
+                            chatHistoryService.saveMessage(conversationId, userMessage, completeResponse);
+                            updateConversationTitleIfNeeded(conversationId, userMessage);
+                        }
+
+                        emitter.send(SseEmitter.event()
+                                .name("done")
+                                .data("[DONE]", MediaType.TEXT_PLAIN));
+                        emitter.complete();
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                try {
+                    emitter.send(SseEmitter.event()
+                            .name("error")
+                            .data("AI回复失败：" + e.getMessage(), MediaType.TEXT_PLAIN));
+                } catch (Exception ignore) { }
+                emitter.completeWithError(e);
+            }
+        };
+
+        // 异步执行流式任务，避免阻塞当前请求线程
+        // 使用单个独立线程，保证每个请求独立
+        new Thread(task, "chat-stream-" + conversationId).start();
+        return emitter;
+    }
+
     private void updateConversationTitleIfNeeded(Long conversationId, String userMessage) {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElse(null);
@@ -119,6 +328,21 @@ public class ChatService {
             conversation.setTitle(newTitle);
             conversationRepository.save(conversation);
         }
+    }
+
+    /**
+     * 判断文本中是否包含句子/段落级别的标点，用于在流式输出时制造更自然的节奏。
+     */
+    private static boolean containsSentenceEnd(String text) {
+        if (text == null) return false;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '。' || c == '！' || c == '!' || c == '？' || c == '?'
+                    || c == '…' || c == '\n' || c == '；' || c == ';') {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String callDeepSeek(ArrayNode messages, ModelConfig config) {

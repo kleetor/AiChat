@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
 
-// model/ChatMessage.java（修改后）
 @Entity
 @Table(name = "chat_messages")
 @Data
@@ -22,7 +21,7 @@ public class ChatMessage {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "conversation_id", nullable = false)
-    private Conversation conversation;  // 新增关联
+    private Conversation conversation;
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String userMessage;
@@ -30,7 +29,6 @@ public class ChatMessage {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String aiReply;
 
-    // 修改 timestamp 字段
     @Column(nullable = false, columnDefinition = "DATETIME")
     private LocalDateTime timestamp;
 

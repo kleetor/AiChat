@@ -1,4 +1,3 @@
-// controller/ChatController.java（完整）
 package com.example.aichat.controller;
 
 import com.example.aichat.dto.ChatHistoryResponse;
@@ -9,9 +8,11 @@ import com.example.aichat.service.ChatHistoryService;
 import com.example.aichat.service.ChatService;
 import com.example.aichat.service.ConversationService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
@@ -44,6 +45,29 @@ public class ChatController {
         return ResponseEntity.ok(response);
     }
 
+    // 流式聊天（SSE）
+    @PostMapping(value = "/chat/{conversationId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public ResponseEntity<SseEmitter> chatStream(@PathVariable Long conversationId,
+                                                 @RequestBody ChatRequest request,
+                                                 Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        if (!conversationService.belongsToUser(conversationId, userId)) {
+            return ResponseEntity.status(403).build();
+        }
+
+        SseEmitter emitter = chatService.chatStream(
+                conversationId,
+                request.getMessage(),
+                request.getPromptId(),
+                request.getModelConfigId()
+        );
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_EVENT_STREAM)
+                .header("Cache-Control", "no-cache, no-transform")
+                .header("X-Accel-Buffering", "no")
+                .body(emitter);
+    }
 
     // 获取某会话的历史
     @GetMapping("/chat/{conversationId}/history")

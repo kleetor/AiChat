@@ -361,27 +361,85 @@
         sendBtn.textContent = '发送中...';
         appendMsg('user', text);
         userInput.value = '';
+        // 创建空的 AI 气泡，用于流式追加内容
+        const aiBubble = appendMsg('ai', '');
+        let aiText = '';
         try {
             const body = { message: text };
             if (currentPromptId) body.promptId = currentPromptId;
             if (currentModelConfigId) body.modelConfigId = currentModelConfigId;
-            const res = await fetch(API + `/api/chat/${currentConvId}`, {
+            const res = await fetch(API + `/api/chat/${currentConvId}/stream`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'text/event-stream',
                     'Authorization': 'Bearer ' + token
                 },
                 body: JSON.stringify(body)
             });
-            const data = await res.json();
-            if (res.ok) {
-                appendMsg('ai', data.reply);
-            } else {
-                appendMsg('ai', '错误: ' + (data.reply || '请求失败'));
-                if (res.status === 401) logout();
+            if (!res.ok) {
+                let errText = '请求失败';
+                try {
+                    const data = await res.json();
+                    errText = data.reply || data.message || errText;
+                } catch (e) {
+                    errText = res.statusText || errText;
+                }
+                if (res.status === 401) { logout(); return; }
+                aiBubble.textContent = '错误: ' + errText;
+                return;
+            }
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+            let stopped = false;
+
+            while (!stopped) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                // 按 SSE 事件块（以空行分隔）切分
+                let sepIdx;
+                while ((sepIdx = buffer.indexOf('\n\n')) !== -1) {
+                    const eventBlock = buffer.slice(0, sepIdx);
+                    buffer = buffer.slice(sepIdx + 2);
+
+                    const lines = eventBlock.split('\n');
+                    let eventName = '';
+                    let dataLines = [];
+                    for (const ln of lines) {
+                        if (ln.startsWith('event:')) {
+                            eventName = ln.slice(6).trim();
+                        } else if (ln.startsWith('data:')) {
+                            dataLines.push(ln.slice(5).trimStart());
+                        } else if (ln.startsWith('data')) {
+                            // 兼容可能出现的 data:...
+                            dataLines.push(ln.slice(5).trimStart());
+                        }
+                    }
+                    const data = dataLines.join('\n');
+
+                    if (eventName === 'done' || data === '[DONE]') {
+                        stopped = true;
+                        break;
+                    }
+                    if (eventName === 'error') {
+                        aiBubble.textContent = (aiText ? aiText + '\n' : '') + '错误: ' + data;
+                        stopped = true;
+                        break;
+                    }
+                    if (data) {
+                        aiText += data;
+                        aiBubble.textContent = aiText;
+                        msgContainer.scrollTop = msgContainer.scrollHeight;
+                    }
+                }
             }
         } catch (e) {
-            appendMsg('ai', '网络错误');
+            console.error(e);
+            aiBubble.textContent = aiText ? aiText : '网络错误';
         }
         sendBtn.disabled = false;
         sendBtn.textContent = '发送';
@@ -391,9 +449,15 @@
     function appendMsg(role, text) {
         const div = document.createElement('div');
         div.className = 'message ' + role;
-        div.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>`;
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        if (text) {
+            bubble.textContent = text;
+        }
+        div.appendChild(bubble);
         msgContainer.appendChild(div);
         msgContainer.scrollTop = msgContainer.scrollHeight;
+        return bubble;
     }
 
     function escapeHtml(t) {
