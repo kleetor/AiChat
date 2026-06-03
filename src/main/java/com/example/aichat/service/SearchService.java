@@ -2,6 +2,7 @@ package com.example.aichat.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
@@ -16,10 +17,10 @@ import java.util.Map;
 @Service
 public class SearchService {
 
-    @Value("${bocha.api.key}")
+    @Value("${qianfan.api.key}")
     private String apiKey;
 
-    @Value("${bocha.api.url:https://api.bocha.cn/v1/web-search}")
+    @Value("${qianfan.api.url:https://qianfan.baidubce.com/v2/ai_search/web_search}")
     private String apiUrl;
 
     private final RestTemplate restTemplate;
@@ -32,14 +33,26 @@ public class SearchService {
 
     public List<Map<String, Object>> search(String query, boolean summary, String freshness, int count) {
         ObjectNode requestBody = objectMapper.createObjectNode();
-        requestBody.put("query", query);
-        requestBody.put("summary", summary);
-        requestBody.put("freshness", freshness != null ? freshness : "noLimit");
-        requestBody.put("count", count > 0 ? count : 10);
+        
+        ArrayNode messagesArray = objectMapper.createArrayNode();
+        ObjectNode message = objectMapper.createObjectNode();
+        message.put("content", query);
+        message.put("role", "user");
+        messagesArray.add(message);
+        requestBody.set("messages", messagesArray);
+        
+        requestBody.put("search_source", "baidu_search_v2");
+        
+        ArrayNode filterArray = objectMapper.createArrayNode();
+        ObjectNode filter = objectMapper.createObjectNode();
+        filter.put("type", "web");
+        filter.put("top_k", count > 0 ? count : 10);
+        filterArray.add(filter);
+        requestBody.set("resource_type_filter", filterArray);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Authorization", "Bearer " + apiKey);
+        headers.set("X-Appbuilder-Authorization", "Bearer " + apiKey);
 
         HttpEntity<String> entity = new HttpEntity<>(requestBody.toString(), headers);
 
@@ -52,20 +65,17 @@ public class SearchService {
             );
 
             JsonNode root = objectMapper.readTree(response.getBody());
-            JsonNode data = root.get("data");
-            JsonNode webPages = data != null ? data.get("webPages") : null;
-            JsonNode results = webPages != null ? webPages.get("value") : null;
+            JsonNode resultList = root.get("references");
 
             List<Map<String, Object>> searchResults = new ArrayList<>();
-            if (results != null && results.isArray()) {
-                for (JsonNode result : results) {
+            if (resultList != null && resultList.isArray()) {
+                for (JsonNode result : resultList) {
                     Map<String, Object> item = new HashMap<>();
-                    if (result.has("name")) item.put("title", result.get("name").asText());
+                    if (result.has("title")) item.put("title", result.get("title").asText());
                     if (result.has("url")) item.put("url", result.get("url").asText());
-                    if (result.has("summary")) item.put("summary", result.get("summary").asText());
-                    if (result.has("siteName")) item.put("siteName", result.get("siteName").asText());
-                    if (result.has("datePublished")) item.put("publishTime", result.get("datePublished").asText());
-                    if (result.has("thumbnailUrl")) item.put("imageUrl", result.get("thumbnailUrl").asText());
+                    if (result.has("snippet")) item.put("summary", result.get("snippet").asText());
+                    if (result.has("website")) item.put("siteName", result.get("website").asText());
+                    if (result.has("date")) item.put("publishTime", result.get("date").asText());
                     searchResults.add(item);
                 }
             }
