@@ -3,9 +3,9 @@ package com.example.aichat.dto;
 import lombok.Data;
 
 @Data
-public class RegisterRequest {
+public class ResetPasswordRequest {
     private String username;
     private String email;
-    private String password;
     private String code;
+    private String newPassword;
 }

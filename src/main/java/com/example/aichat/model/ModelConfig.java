@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+
 @Entity
 @Table(name = "model_configs")
 @Data
@@ -25,4 +27,15 @@ public class ModelConfig {
 
     @Column(nullable = false)
     private String modelName;
+
+    @Column(length = 100)
+    private String displayName;
+
+    @Column(nullable = false, precision = 12, scale = 6)
+    @Builder.Default
+    private BigDecimal inputTokenPrice = new BigDecimal("0.001000");
+
+    @Column(nullable = false, precision = 12, scale = 6)
+    @Builder.Default
+    private BigDecimal outputTokenPrice = new BigDecimal("0.002000");
 }

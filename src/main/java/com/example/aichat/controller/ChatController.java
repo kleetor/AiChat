@@ -4,6 +4,7 @@ import com.example.aichat.dto.ChatHistoryResponse;
 import com.example.aichat.dto.ChatRequest;
 import com.example.aichat.dto.ChatResponse;
 import com.example.aichat.model.Conversation;
+import com.example.aichat.service.BillingService;
 import com.example.aichat.service.ChatHistoryService;
 import com.example.aichat.service.ChatService;
 import com.example.aichat.service.ConversationService;
@@ -14,7 +15,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -29,31 +32,56 @@ public class ChatController {
     @Autowired
     private ConversationService conversationService;
 
+    @Autowired
+    private BillingService billingService;
+
     // 聊天：接收消息和会话ID（必须）
     @PostMapping("/chat/{conversationId}")
-    public ResponseEntity<ChatResponse> chat(@PathVariable Long conversationId,
-                                             @RequestBody ChatRequest request,
-                                             Authentication authentication) {
+    public ResponseEntity<?> chat(@PathVariable Long conversationId,
+                                  @RequestBody ChatRequest request,
+                                  Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         if (!conversationService.belongsToUser(conversationId, userId)) {
             return ResponseEntity.status(403).build();
         }
+
+        try {
+            Long estimatedInputTokens = (long) (request.getMessage().length() * 1.3);
+            billingService.checkAndReserveBalance(userId, request.getModelConfigId(), estimatedInputTokens);
+        } catch (BillingService.InsufficientBalanceException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(402).body(error);
+        }
+
         boolean webSearchEnabled = Boolean.TRUE.equals(request.getWebSearchEnabled());
-        String reply = chatService.chatAndSave(conversationId, request.getMessage(),
-                request.getPromptId(), request.getModelConfigId(), webSearchEnabled);
+        ChatService.TokenUsageResult result = chatService.chatAndSave(conversationId, request.getMessage(),
+                request.getPromptId(), request.getModelConfigId(), webSearchEnabled, userId);
         ChatResponse response = new ChatResponse();
-        response.setReply(reply);
+        response.setReply(result.getReply());
+        response.setInputTokens(result.getInputTokens());
+        response.setOutputTokens(result.getOutputTokens());
+        response.setCostAmount(result.getCostAmount());
         return ResponseEntity.ok(response);
     }
 
     // 流式聊天（SSE）
     @PostMapping(value = "/chat/{conversationId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public ResponseEntity<SseEmitter> chatStream(@PathVariable Long conversationId,
-                                                 @RequestBody ChatRequest request,
-                                                 Authentication authentication) {
+    public ResponseEntity<?> chatStream(@PathVariable Long conversationId,
+                                        @RequestBody ChatRequest request,
+                                        Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         if (!conversationService.belongsToUser(conversationId, userId)) {
             return ResponseEntity.status(403).build();
+        }
+
+        try {
+            Long estimatedInputTokens = (long) (request.getMessage().length() * 1.3);
+            billingService.checkAndReserveBalance(userId, request.getModelConfigId(), estimatedInputTokens);
+        } catch (BillingService.InsufficientBalanceException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(402).body(error);
         }
 
         boolean webSearchEnabled = Boolean.TRUE.equals(request.getWebSearchEnabled());
@@ -62,7 +90,8 @@ public class ChatController {
                 request.getMessage(),
                 request.getPromptId(),
                 request.getModelConfigId(),
-                webSearchEnabled
+                webSearchEnabled,
+                userId
         );
 
         return ResponseEntity.ok()

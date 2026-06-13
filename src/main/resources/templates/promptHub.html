@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>提示词社区</title>
+    <link rel="stylesheet" th:href="@{/app.css}">
+</head>
+<body>
+    <div class="hub-container">
+        <div class="hub-header">
+            <h1>✨ 提示词社区</h1>
+            <div class="header-actions">
+                <span id="userDisplay"></span>
+                <button id="btnLogout" class="auth-btn">退出</button>
+                <button id="btnBack" class="auth-btn">返回</button>
+            </div>
+        </div>
+
+        <div class="upload-section">
+            <button id="uploadBtn" class="upload-btn">📤 上传提示词</button>
+        </div>
+
+        <div class="prompts-grid" id="promptsGrid"></div>
+
+        <div class="empty-state" id="emptyState" style="display:none;">
+            <h2>暂无提示词</h2>
+            <p>快来分享你的第一个提示词吧！</p>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="uploadModal">
+        <div class="modal">
+            <h2>📤 上传提示词</h2>
+            <div class="form-group">
+                <label>选择要上传的提示词</label>
+                <select id="promptSelect">
+                    <option value="">请选择提示词</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>留言（可选）</label>
+                <textarea id="userMessage" rows="3" placeholder="分享你对这个提示词的使用心得..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>封面图片（可选，最大 5MB，支持 PNG/JPG/GIF/WEBP）</label>
+                <input type="file" id="imageInput" accept="image/png,image/jpeg,image/gif,image/webp">
+                <div id="imagePreview" class="image-preview" style="margin-top:8px;"></div>
+            </div>
+            <button class="btn-primary" id="submitUpload">确认上传</button>
+            <button class="btn-secondary" id="cancelUpload">取消</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="detailModal">
+        <div class="modal detail-modal">
+            <div class="modal-header">
+                <h2 id="detailName"></h2>
+                <button class="close-btn" id="closeDetail">&times;</button>
+            </div>
+            <div class="detail-content">
+                <div class="detail-meta">
+                    <span class="meta-item">👤 <span id="detailAuthor"></span></span>
+                    <span class="meta-item">❤️ <span id="detailLikes"></span></span>
+                    <span class="meta-item">📅 <span id="detailDate"></span></span>
+                </div>
+                <div class="detail-image" id="detailImage"></div>
+                <div class="detail-section">
+                    <h3>提示词内容</h3>
+                    <pre id="detailContent"></pre>
+                </div>
+                <div class="detail-section" id="detailMessageSection" style="display:none;">
+                    <h3>作者留言</h3>
+                    <p id="detailMessage"></p>
+                </div>
+            </div>
+            <div class="detail-actions">
+                <button class="like-btn" id="likeBtn">❤️ 点赞</button>
+                <button class="download-btn" id="downloadBtn">⬇️ 下载到我的提示词</button>
+            </div>
+        </div>
+    </div>
+
+    <script th:src="@{/promptHub.js}"></script>
+</body>
+</html>

@@ -30,6 +30,7 @@
                 <span class="toggle-label">🌐 联网搜索</span>
             </label>
             <span id="userDisplay"></span>
+            <span id="balanceIndicator" class="balance-indicator" style="display:none;">💰 <span id="balanceAmount">0.0000</span> 元</span>
             <button id="btnPrompt" class="auth-btn">📝 提示词</button>
             <button id="btnModel" class="auth-btn">🤖 模型</button>
             <button id="btnLogin" class="auth-btn">登录</button>
@@ -71,18 +72,57 @@
 <div class="modal-overlay" id="authModal">
     <div class="modal">
         <h2 id="modalTitle">登录</h2>
-        <div class="form-group">
+        <div class="form-group" id="modalUsernameGroup">
             <label>用户名</label>
             <input type="text" id="modalUsername" placeholder="请输入用户名">
         </div>
-        <div class="form-group">
+        <div class="form-group" id="modalEmailGroup" style="display:none;">
+            <label>邮箱</label>
+            <input type="email" id="modalEmail" placeholder="请输入邮箱">
+        </div>
+        <div class="form-group" id="modalPasswordGroup">
             <label>密码</label>
             <input type="password" id="modalPassword" placeholder="请输入密码">
+        </div>
+        <div class="form-group" id="modalCodeGroup" style="display:none;">
+            <label>验证码</label>
+            <div style="display:flex; gap:8px;">
+                <input type="text" id="modalCode" placeholder="6位验证码" style="flex:1;" maxlength="6">
+                <button id="modalSendCode" style="background:#4f46e5;color:white;border:none;border-radius:12px;padding:10px 16px;cursor:pointer;font-size:13px;white-space:nowrap;">发送验证码</button>
+            </div>
         </div>
         <div id="modalError" class="error-msg">错误</div>
         <button class="btn-primary" id="modalSubmit">登录</button>
         <div class="switch">
             <span id="switchText">还没有账号？<a id="switchLink">注册</a></span>
+            <span id="forgotPasswordLink" style="display:none;margin-left:12px;"><a href="#">忘记密码？</a></span>
+        </div>
+    </div>
+</div>
+
+<!-- 重置密码模态框 -->
+<div class="modal-overlay" id="resetPwdModal">
+    <div class="modal">
+        <h2>重置密码</h2>
+        <div class="form-group">
+            <label>用户名或邮箱</label>
+            <input type="text" id="resetUsername" placeholder="请输入用户名或邮箱">
+        </div>
+        <div class="form-group">
+            <label>验证码</label>
+            <div style="display:flex; gap:8px;">
+                <input type="text" id="resetCode" placeholder="6位验证码" style="flex:1;" maxlength="6">
+                <button id="resetSendCode" style="background:#4f46e5;color:white;border:none;border-radius:12px;padding:10px 16px;cursor:pointer;font-size:13px;white-space:nowrap;">发送验证码</button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>新密码</label>
+            <input type="password" id="resetNewPassword" placeholder="请输入新密码（至少6位）">
+        </div>
+        <div id="resetPwdError" class="error-msg">错误</div>
+        <button class="btn-primary" id="resetPwdSubmit">重置密码</button>
+        <div class="switch">
+            <span>想起密码了？<a id="backToLoginLink" href="#">返回登录</a></span>
         </div>
     </div>
 </div>
@@ -92,7 +132,10 @@
     <div class="modal">
         <h2>📝 自定义提示词</h2>
         <div class="prompt-list" id="promptList"></div>
-        <button class="new-prompt-btn" id="newPromptBtn">＋ 新建提示词</button>
+        <div style="display:flex; gap:12px; margin-bottom:12px;">
+            <button class="new-prompt-btn" id="newPromptBtn">＋ 新建提示词</button>
+            <button class="hub-prompt-btn" id="hubPromptBtn">🌐 获取/上传提示词</button>
+        </div>
         <div style="text-align:right;margin-top:12px;">
             <button class="btn-primary" style="width:auto;padding:8px 20px;" id="closePromptModalBtn">关闭</button>
         </div>
@@ -137,6 +180,7 @@
         <!-- 设置标签页 -->
         <div class="settings-tabs">
             <button class="tab-btn active" data-tab="profile">👤 个人信息</button>
+            <button class="tab-btn" data-tab="wallet">💰 我的钱包</button>
         </div>
 
         <!-- 个人信息标签 -->
@@ -147,11 +191,28 @@
                     <span class="info-value" id="settingsUsername"></span>
                 </div>
                 <div class="info-row">
+                    <span class="info-label">邮箱</span>
+                    <span class="info-value" id="settingsEmail"></span>
+                </div>
+                <div class="info-row">
                     <span class="info-label">用户PID</span>
                     <span class="info-value" id="settingsPid"></span>
                 </div>
             </div>
             <button class="change-password-btn" id="btnChangePassword">🔒 修改密码</button>
+        </div>
+
+        <!-- 钱包标签 -->
+        <div class="tab-content" id="wallet-tab">
+            <div class="wallet-card">
+                <h3>当前余额</h3>
+                <div class="balance-big">¥ <span id="settingsBalance">0.0000</span></div>
+                <button id="btnSponsor" class="btn-primary sponsor-btn">💝 赞助</button>
+            </div>
+            <div style="margin-top:24px;">
+                <h4>消费记录</h4>
+                <div id="usageRecords" class="usage-records"></div>
+            </div>
         </div>
 
         <div class="settings-actions">
@@ -195,6 +256,49 @@
         <div id="newPasswordError" class="error-msg"></div>
     </div>
 </div>
+<!-- 赞助模态框 -->
+<div class="modal-overlay" id="sponsorModal">
+    <div class="modal" style="max-width: 600px;">
+        <h2>💝 赞助支持</h2>
+        <p style="color:#6b7280; font-size:13px; text-align:center; margin-bottom:16px;">
+            请扫描下方收款码进行赞助，完成后上传赞助截图，管理员审核后将为您发放对应 Token。注意上传的赞助截图需要备注您的用户PID。
+        </p>
+        <div class="sponsor-layout">
+            <!-- 左侧：收款码 -->
+            <div class="sponsor-left">
+                <h4>📱 微信收款码</h4>
+                <img src="/uploads/Storepic/weixinPic.png" alt="收款码" class="sponsor-qrcode" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+                <p class="sponsor-qrcode-fallback" style="display:none; color:#9ca3af; font-size:13px; padding:20px;">收款码图片加载中...</p>
+                <p style="font-size:12px; color:#9ca3af; margin-top:8px;">请使用微信扫描二维码</p>
+            </div>
+            <!-- 右侧：上传截图 -->
+            <div class="sponsor-right">
+                <h4>📎 上传赞助截图</h4>
+                <div class="upload-area" id="sponsorUploadArea">
+                    <div class="upload-placeholder" id="sponsorUploadPlaceholder">
+                        <span style="font-size:36px;">📷</span>
+                        <p>点击或拖拽上传赞助截图</p>
+                        <p style="font-size:12px; color:#9ca3af;">支持 PNG / JPG / GIF，最大 5MB</p>
+                    </div>
+                    <input type="file" id="sponsorFileInput" accept="image/png,image/jpeg,image/jpg,image/gif" style="display:none;">
+                    <img id="sponsorPreview" style="display:none; max-width:100%; max-height:200px; border-radius:8px; margin:0 auto;">
+                </div>
+                <div style="margin-top:12px;">
+                    <label style="font-size:13px; color:#374151; display:block; margin-bottom:4px;">💰 赞助金额（元）</label>
+                    <input type="number" id="sponsorAmount" placeholder="请输入赞助金额" step="0.01" min="0.01"
+                           style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; box-sizing:border-box;">
+                </div>
+                <button class="btn-primary" id="btnSponsorCreate" style="margin-top:12px; width:100%;">📤 创建赞助审核</button>
+                <div id="sponsorError" class="error-msg"></div>
+                <div id="sponsorSuccess" class="success-msg" style="display:none;"></div>
+            </div>
+        </div>
+        <div style="text-align:center; margin-top:16px;">
+            <a id="closeSponsorModalBtn" style="color:#6b7280; cursor:pointer; font-size:14px;">关闭</a>
+        </div>
+    </div>
+</div>
+
 <script th:src="@{/app.js}"></script>
 </body>
 </html>

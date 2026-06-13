@@ -1,0 +1,13 @@
+target/*
+!target/*.jar
+*.iml
+.idea/
+.vscode/
+.git/
+.gitignore
+*.md
+.env.example
+node_modules/
+logs/
+uploads/images/
+uploads/upStorepic/

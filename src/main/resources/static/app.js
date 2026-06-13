@@ -33,14 +33,31 @@
     const authModal = document.getElementById('authModal');
     const modalTitle = document.getElementById('modalTitle');
     const modalUsername = document.getElementById('modalUsername');
+    const modalEmail = document.getElementById('modalEmail');
     const modalPassword = document.getElementById('modalPassword');
+    const modalPasswordGroup = document.getElementById('modalPasswordGroup');
+    const modalCode = document.getElementById('modalCode');
+    const modalSendCode = document.getElementById('modalSendCode');
     const modalSubmit = document.getElementById('modalSubmit');
     const modalError = document.getElementById('modalError');
     const switchText = document.getElementById('switchText');
     const switchLink = document.getElementById('switchLink');
+    const modalUsernameGroup = document.getElementById('modalUsernameGroup');
+    const modalEmailGroup = document.getElementById('modalEmailGroup');
+    const modalCodeGroup = document.getElementById('modalCodeGroup');
+    const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+    const resetPwdModal = document.getElementById('resetPwdModal');
+    const resetUsername = document.getElementById('resetUsername');
+    const resetCode = document.getElementById('resetCode');
+    const resetSendCode = document.getElementById('resetSendCode');
+    const resetNewPassword = document.getElementById('resetNewPassword');
+    const resetPwdError = document.getElementById('resetPwdError');
+    const resetPwdSubmit = document.getElementById('resetPwdSubmit');
+    const backToLoginLink = document.getElementById('backToLoginLink');
     const promptModal = document.getElementById('promptModal');
     const promptList = document.getElementById('promptList');
     const newPromptBtn = document.getElementById('newPromptBtn');
+    const hubPromptBtn = document.getElementById('hubPromptBtn');
     const closePromptModalBtn = document.getElementById('closePromptModalBtn');
     const editPromptModal = document.getElementById('editPromptModal');
     const editPromptTitle = document.getElementById('editPromptTitle');
@@ -63,6 +80,7 @@
     
     // 设置表单元素
     const settingsUsername = document.getElementById('settingsUsername');
+    const settingsEmail = document.getElementById('settingsEmail');
     const settingsPid = document.getElementById('settingsPid');
     
     // 密码修改相关元素
@@ -144,6 +162,8 @@
         currentModelConfigId = null;
         currentPromptIndicator.style.display = 'none';
         currentModelIndicator.style.display = 'none';
+        balanceIndicator.style.display = 'none';
+        balanceAmount.textContent = '0.0000';
         searchToggleLabel.classList.remove('visible');
         webSearchToggle.checked = false;
         userDisplay.textContent = '';
@@ -181,6 +201,15 @@
         modalError.classList.remove('show');
         modalUsername.value = '';
         modalPassword.value = '';
+        modalCode.value = '';
+        modalUsernameGroup.style.display = 'block';
+        modalUsername.placeholder = loginMode ? '用户名或邮箱' : '请输入用户名';
+        modalEmailGroup.style.display = loginMode ? 'none' : 'block';
+        modalEmail.value = '';
+        modalPasswordGroup.style.display = 'block';
+        modalCodeGroup.style.display = loginMode ? 'none' : 'block';
+        forgotPasswordLink.style.display = loginMode ? 'inline' : 'none';
+        resetSendCodeBtn();
         authModal.classList.add('show');
         document.getElementById('switchLink').addEventListener('click', function(e) {
             e.preventDefault();
@@ -196,33 +225,228 @@
 
     btnLogin.addEventListener('click', () => openAuthModal(true));
 
-    modalSubmit.addEventListener('click', async function() {
-        const user = modalUsername.value.trim();
-        const pass = modalPassword.value.trim();
-        if (!user || !pass) { showModalError('请填写完整'); return; }
-        const endpoint = isLoginMode ? '/api/auth/login' : '/api/auth/register';
+    // 忘记密码
+    forgotPasswordLink.addEventListener('click', function(e) {
+        e.preventDefault();
+        closeAuthModal();
+        resetPwdError.classList.remove('show');
+        resetUsername.value = '';
+        resetCode.value = '';
+        resetNewPassword.value = '';
+        resetPwdSendCodeBtn();
+        resetPwdModal.classList.add('show');
+    });
+
+    // 返回登录
+    backToLoginLink.addEventListener('click', function(e) {
+        e.preventDefault();
+        resetPwdModal.classList.remove('show');
+        openAuthModal(true);
+    });
+
+    resetPwdModal.addEventListener('click', function(e) {
+        if (e.target === resetPwdModal) {
+            resetPwdModal.classList.remove('show');
+        }
+    });
+
+    // 重置密码发送验证码
+    let resetSendCodeTimer = null;
+    function resetPwdSendCodeBtn() {
+        if (resetSendCodeTimer) {
+            clearInterval(resetSendCodeTimer);
+            resetSendCodeTimer = null;
+        }
+        resetSendCode.disabled = false;
+        resetSendCode.textContent = '发送验证码';
+        resetSendCode.style.background = '#4f46e5';
+    }
+
+    resetSendCode.addEventListener('click', async function() {
+        const usernameVal = resetUsername.value.trim();
+        if (!usernameVal) { showResetPwdError('请输入用户名或邮箱'); return; }
+        resetPwdError.classList.remove('show');
+        resetSendCode.disabled = true;
+        resetSendCode.textContent = '发送中...';
         try {
-            const res = await fetch(API + endpoint, {
+            const res = await fetch(API + '/api/auth/send-reset-code', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: user, password: pass })
+                body: JSON.stringify({ username: usernameVal })
             });
             const data = await res.json();
             if (!res.ok) {
-                showModalError(typeof data === 'string' ? data : (data.message || '错误'));
+                resetPwdSendCodeBtn();
+                showResetPwdError(data.message || '发送失败');
                 return;
             }
-            token = data.token;
-            username = data.username;
-            localStorage.setItem('chat_token', token);
-            localStorage.setItem('chat_username', username);
-            showLoggedIn(username);
-            closeAuthModal();
-            loadConversations();
-            loadPromptsSilent();
-            loadModelsSilent();
+            let seconds = 60;
+            resetSendCode.textContent = seconds + 's后重发';
+            resetSendCode.style.background = '#9ca3af';
+            resetSendCodeTimer = setInterval(() => {
+                seconds--;
+                if (seconds <= 0) {
+                    resetPwdSendCodeBtn();
+                } else {
+                    resetSendCode.textContent = seconds + 's后重发';
+                }
+            }, 1000);
         } catch (e) {
+            resetPwdSendCodeBtn();
+            showResetPwdError('网络错误');
+        }
+    });
+
+    function showResetPwdError(msg) { resetPwdError.textContent = msg; resetPwdError.classList.add('show'); }
+
+    resetPwdSubmit.addEventListener('click', async function() {
+        const usernameVal = resetUsername.value.trim();
+        const code = resetCode.value.trim();
+        const newPass = resetNewPassword.value.trim();
+        if (!usernameVal) { showResetPwdError('请输入用户名或邮箱'); return; }
+        if (!code) { showResetPwdError('请输入验证码'); return; }
+        if (!newPass) { showResetPwdError('请输入新密码'); return; }
+        if (newPass.length < 6) { showResetPwdError('密码长度至少6位'); return; }
+        try {
+            const res = await fetch(API + '/api/auth/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: usernameVal, code: code, newPassword: newPass })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                showResetPwdError(data.message || '重置失败');
+                return;
+            }
+            alert('密码重置成功，请使用新密码登录');
+            resetPwdModal.classList.remove('show');
+            openAuthModal(true);
+        } catch (e) {
+            showResetPwdError('网络错误');
+        }
+    });
+
+    // 发送验证码
+    let sendCodeTimer = null;
+    function resetSendCodeBtn() {
+        if (sendCodeTimer) {
+            clearInterval(sendCodeTimer);
+            sendCodeTimer = null;
+        }
+        modalSendCode.disabled = false;
+        modalSendCode.textContent = '发送验证码';
+        modalSendCode.style.background = '#4f46e5';
+    }
+
+    modalSendCode.addEventListener('click', async function() {
+        const email = modalEmail.value.trim();
+        if (!email) { showModalError('请先输入邮箱'); return; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            showModalError('邮箱格式不正确'); return;
+        }
+        modalError.classList.remove('show');
+        modalSendCode.disabled = true;
+        modalSendCode.textContent = '发送中...';
+        try {
+            const res = await fetch(API + '/api/auth/send-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                resetSendCodeBtn();
+                showModalError(data.message || '发送失败');
+                return;
+            }
+            // 60秒倒计时
+            let seconds = 60;
+            modalSendCode.textContent = seconds + 's后重发';
+            modalSendCode.style.background = '#9ca3af';
+            sendCodeTimer = setInterval(() => {
+                seconds--;
+                if (seconds <= 0) {
+                    resetSendCodeBtn();
+                } else {
+                    modalSendCode.textContent = seconds + 's后重发';
+                }
+            }, 1000);
+        } catch (e) {
+            resetSendCodeBtn();
             showModalError('网络错误');
+        }
+    });
+
+    modalSubmit.addEventListener('click', async function() {
+        const usernameVal = modalUsername.value.trim();
+        const emailVal = modalEmail.value.trim();
+        const pass = modalPassword.value.trim();
+        const code = modalCode.value.trim();
+
+        if (isLoginMode) {
+            // 登录：用户名或邮箱 + 密码
+            if (!usernameVal) { showModalError('请输入用户名或邮箱'); return; }
+            if (!pass) { showModalError('请输入密码'); return; }
+            try {
+                const res = await fetch(API + '/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: usernameVal, password: pass })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    showModalError(data.message || '登录失败');
+                    return;
+                }
+                token = data.token;
+                username = data.username;
+                localStorage.setItem('chat_token', token);
+                localStorage.setItem('chat_username', username);
+                showLoggedIn(username);
+                closeAuthModal();
+                loadConversations();
+                loadPromptsSilent();
+                loadModelsSilent();
+            } catch (e) {
+                showModalError('网络错误');
+            }
+        } else {
+            // 注册：用户名 + 邮箱 + 密码 + 验证码
+            if (!usernameVal) { showModalError('请输入用户名'); return; }
+            if (!emailVal) { showModalError('请输入邮箱'); return; }
+            if (!pass) { showModalError('请输入密码'); return; }
+            if (!code) { showModalError('请输入验证码'); return; }
+            try {
+                const res = await fetch(API + '/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: usernameVal, email: emailVal, password: pass, code: code })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    showModalError(data.message || '注册失败');
+                    return;
+                }
+                token = data.token;
+                username = data.username;
+                const balance = data.balance || 0;
+                localStorage.setItem('chat_token', token);
+                localStorage.setItem('chat_username', username);
+                showLoggedIn(username);
+                closeAuthModal();
+                loadConversations();
+                loadPromptsSilent();
+                loadModelsSilent();
+                // 显示新用户赠送提示
+                if (balance > 0) {
+                    updateBalanceDisplay(balance);
+                    setTimeout(() => {
+                        alert('注册成功！已赠送您 ' + balance + ' 元体验金，快去体验吧~');
+                    }, 100);
+                }
+            } catch (e) {
+                showModalError('网络错误');
+            }
         }
     });
 
@@ -465,7 +689,7 @@
         div.appendChild(bubble);
         msgContainer.appendChild(div);
         msgContainer.scrollTop = msgContainer.scrollHeight;
-        return bubble;
+        return { container: div, bubble: bubble };
     }
 
     function escapeHtml(t) {
@@ -482,6 +706,11 @@
     });
 
     closePromptModalBtn.addEventListener('click', () => promptModal.classList.remove('show'));
+
+    hubPromptBtn.addEventListener('click', () => {
+        promptModal.classList.remove('show');
+        window.location.href = '/prompt-hub';
+    });
 
     // 静默加载提示词（用于恢复选中名称）
     async function loadPromptsSilent() {
@@ -816,6 +1045,7 @@
             }
             const user = await res.json();
             settingsUsername.textContent = user.username || '';
+            settingsEmail.textContent = user.email || '';
             settingsPid.textContent = user.pid || '';
         } catch(e) { 
             console.error('加载用户信息失败', e); 
@@ -942,6 +1172,405 @@
             newPasswordError.classList.add('show');
         }
     });
+    
+    // ======== 余额相关功能 ========
+    const balanceIndicator = document.getElementById('balanceIndicator');
+    const balanceAmount = document.getElementById('balanceAmount');
+    const settingsBalance = document.getElementById('settingsBalance');
+    const usageRecords = document.getElementById('usageRecords');
+    
+    function formatMoney(value) {
+        if (!value) return '0.0000';
+        const num = parseFloat(value);
+        return num.toFixed(4);
+    }
+
+    function updateBalanceDisplay(balance) {
+        const formattedBalance = formatMoney(balance);
+        balanceAmount.textContent = formattedBalance;
+        balanceIndicator.style.display = 'inline-flex';
+    }
+    
+    async function loadBalance() {
+        if (!token) return;
+        try {
+            const res = await fetch(API + '/api/billing/balance', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (!res.ok) {
+                if (res.status === 401) logout();
+                return;
+            }
+            const data = await res.json();
+            balanceAmount.textContent = formatMoney(data.balance);
+            settingsBalance.textContent = formatMoney(data.balance);
+            balanceIndicator.style.display = 'inline-flex';
+        } catch(e) {
+            console.error('加载余额失败', e);
+        }
+    }
+    
+    async function loadUsageRecords() {
+        if (!token) return;
+        try {
+            const res = await fetch(API + '/api/billing/usage-records?page=0&size=20', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (!res.ok) {
+                if (res.status === 401) logout();
+                return;
+            }
+            const data = await res.json();
+            const records = data.content || [];
+            if (records.length === 0) {
+                usageRecords.innerHTML = '<div class="usage-empty">暂无消费记录</div>';
+                return;
+            }
+            let html = '';
+            records.forEach(record => {
+                const time = new Date(record.createdAt).toLocaleString('zh-CN', { 
+                    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+                });
+                html += `<div class="usage-record-item">
+                            <div class="usage-record-left">
+                                <div class="usage-record-model">${escapeHtml(record.modelName)}</div>
+                                <div class="usage-record-time">${time}</div>
+                            </div>
+                            <div class="usage-record-right">
+                                <div class="usage-record-tokens">${record.inputTokens}/${record.outputTokens} tokens</div>
+                                <div class="usage-record-amount">-¥${formatMoney(record.costAmount)}</div>
+                            </div>
+                        </div>`;
+            });
+            usageRecords.innerHTML = html;
+        } catch(e) {
+            console.error('加载消费记录失败', e);
+        }
+    }
+    
+    // ======== 赞助功能 ========
+    const btnSponsor = document.getElementById('btnSponsor');
+    const sponsorModal = document.getElementById('sponsorModal');
+    const sponsorUploadArea = document.getElementById('sponsorUploadArea');
+    const sponsorUploadPlaceholder = document.getElementById('sponsorUploadPlaceholder');
+    const sponsorFileInput = document.getElementById('sponsorFileInput');
+    const sponsorPreview = document.getElementById('sponsorPreview');
+    const btnSponsorCreate = document.getElementById('btnSponsorCreate');
+    const sponsorAmount = document.getElementById('sponsorAmount');
+    const sponsorError = document.getElementById('sponsorError');
+    const sponsorSuccess = document.getElementById('sponsorSuccess');
+    const closeSponsorModalBtn = document.getElementById('closeSponsorModalBtn');
+
+    let selectedSponsorFile = null;
+    
+    // 打开赞助模态框
+    btnSponsor.addEventListener('click', showSponsorModal);
+    
+    function showSponsorModal() {
+        resetSponsorForm();
+        sponsorModal.classList.add('show');
+    }
+    
+    function resetSponsorForm() {
+        selectedSponsorFile = null;
+        sponsorFileInput.value = '';
+        sponsorPreview.style.display = 'none';
+        sponsorUploadPlaceholder.style.display = 'block';
+        sponsorAmount.value = '';
+        sponsorError.classList.remove('show');
+        sponsorSuccess.style.display = 'none';
+        btnSponsorCreate.disabled = false;
+        btnSponsorCreate.textContent = '📤 创建赞助审核';
+    }
+    
+    // 关闭赞助模态框
+    function closeSponsorModal() {
+        sponsorModal.classList.remove('show');
+        resetSponsorForm();
+    }
+    
+    sponsorModal.addEventListener('click', function(e) {
+        if (e.target === sponsorModal) closeSponsorModal();
+    });
+    
+    closeSponsorModalBtn.addEventListener('click', closeSponsorModal);
+    
+    // 点击上传区域选择文件
+    sponsorUploadArea.addEventListener('click', function(e) {
+        if (e.target !== sponsorPreview) {
+            sponsorFileInput.click();
+        }
+    });
+    
+    // 拖拽上传支持
+    sponsorUploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        this.style.borderColor = '#4f46e5';
+        this.style.background = '#f0f4ff';
+    });
+    
+    sponsorUploadArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        this.style.borderColor = '#d1d5db';
+        this.style.background = '#fafafa';
+    });
+    
+    sponsorUploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        this.style.borderColor = '#d1d5db';
+        this.style.background = '#fafafa';
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleSponsorFile(files[0]);
+        }
+    });
+    
+    // 文件选择事件
+    sponsorFileInput.addEventListener('change', function() {
+        if (this.files.length > 0) {
+            handleSponsorFile(this.files[0]);
+        }
+    });
+    
+    function handleSponsorFile(file) {
+        const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif'];
+        if (!allowedTypes.includes(file.type)) {
+            sponsorError.textContent = '仅支持 PNG / JPG / GIF 格式的图片';
+            sponsorError.classList.add('show');
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            sponsorError.textContent = '图片大小不能超过 5MB';
+            sponsorError.classList.add('show');
+            return;
+        }
+        
+        sponsorError.classList.remove('show');
+        selectedSponsorFile = file;
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            sponsorPreview.src = e.target.result;
+            sponsorPreview.style.display = 'block';
+            sponsorUploadPlaceholder.style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+    }
+    
+    // 创建赞助审核
+    btnSponsorCreate.addEventListener('click', async function() {
+        if (!selectedSponsorFile) {
+            sponsorError.textContent = '请先选择赞助截图';
+            sponsorError.classList.add('show');
+            return;
+        }
+        
+        const amountVal = sponsorAmount.value.trim();
+        if (!amountVal || parseFloat(amountVal) <= 0) {
+            sponsorError.textContent = '请输入有效的赞助金额';
+            sponsorError.classList.add('show');
+            return;
+        }
+        
+        sponsorError.classList.remove('show');
+        sponsorSuccess.style.display = 'none';
+        btnSponsorCreate.disabled = true;
+        btnSponsorCreate.textContent = '提交中...';
+        
+        try {
+            const formData = new FormData();
+            formData.append('image', selectedSponsorFile);
+            formData.append('amount', amountVal);
+            
+            const res = await fetch(API + '/api/billing/sponsor-create', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token },
+                body: formData
+            });
+            
+            const data = await res.json();
+            
+            if (!res.ok || !data.success) {
+                sponsorError.textContent = data.message || '提交失败';
+                sponsorError.classList.add('show');
+                btnSponsorCreate.disabled = false;
+                btnSponsorCreate.textContent = '📤 创建赞助审核';
+                return;
+            }
+            
+            sponsorSuccess.textContent = data.message || '赞助审核已提交，请等待管理员审核后发放 Token';
+            sponsorSuccess.style.display = 'block';
+            sponsorSuccess.classList.add('show');
+            sponsorFileInput.value = '';
+            selectedSponsorFile = null;
+            sponsorPreview.style.display = 'none';
+            sponsorUploadPlaceholder.style.display = 'block';
+            sponsorAmount.value = '';
+            btnSponsorCreate.disabled = false;
+            btnSponsorCreate.textContent = '📤 创建赞助审核';
+        } catch(e) {
+            sponsorError.textContent = '网络错误，请稍后重试';
+            sponsorError.classList.add('show');
+            btnSponsorCreate.disabled = false;
+            btnSponsorCreate.textContent = '📤 创建赞助审核';
+        }
+    });
+    
+    // 更新登录后的操作，加载余额
+    function showLoggedIn(name) {
+        username = name;
+        localStorage.setItem('chat_username', name);
+        userDisplay.textContent = `👤 ${name}`;
+        btnLogin.style.display = 'none';
+        btnLogout.style.display = 'inline-block';
+        btnSettings.style.display = 'block';
+        btnPrompt.style.display = 'inline-block';
+        btnModel.style.display = 'inline-block';
+        searchToggleLabel.classList.add('visible');
+        loadBalance();
+        if (currentConvId) {
+            enableInput(true);
+        } else {
+            enableInput(false);
+        }
+    }
+    
+    // 更新设置模态框打开时加载余额和消费记录
+    function openSettingsModal() {
+        loadUserInfo();
+        loadBalance();
+        loadUsageRecords();
+        settingsModal.classList.add('show');
+    }
+    
+    // 更新发送消息处理402错误
+    async function sendMessage() {
+        const text = userInput.value.trim();
+        if (!text || !currentConvId || !token) return;
+        sendBtn.disabled = true;
+        sendBtn.textContent = '发送中...';
+        appendMsg('user', text);
+        userInput.value = '';
+        const { container: aiContainer, bubble: aiBubble } = appendMsg('ai', '');
+        let aiText = '';
+        let tokenUsageData = null;
+        try {
+            const body = { message: text };
+            if (currentPromptId) body.promptId = currentPromptId;
+            if (currentModelConfigId) body.modelConfigId = currentModelConfigId;
+            body.webSearchEnabled = webSearchToggle.checked;
+            const res = await fetch(API + `/api/chat/${currentConvId}/stream`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'text/event-stream',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify(body)
+            });
+            if (!res.ok) {
+                let errText = '请求失败';
+                try {
+                    const data = await res.json();
+                    errText = data.error || data.message || errText;
+                } catch (e) {
+                    errText = res.statusText || errText;
+                }
+                if (res.status === 401) { logout(); return; }
+                if (res.status === 402) {
+                    aiBubble.textContent = errText + '，请前往设置页面充值。';
+                    loadBalance();
+                } else {
+                    aiBubble.textContent = '错误: ' + errText;
+                }
+                return;
+            }
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+            let stopped = false;
+
+            while (!stopped) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                let sepIdx;
+                while ((sepIdx = buffer.indexOf('\n\n')) !== -1) {
+                    const eventBlock = buffer.slice(0, sepIdx);
+                    buffer = buffer.slice(sepIdx + 2);
+
+                    const lines = eventBlock.split('\n');
+                    let eventName = '';
+                    let dataLines = [];
+                    for (const ln of lines) {
+                        if (ln.startsWith('event:')) {
+                            eventName = ln.slice(6).trim();
+                        } else if (ln.startsWith('data:')) {
+                            dataLines.push(ln.slice(5).trimStart());
+                        } else if (ln.startsWith('data')) {
+                            dataLines.push(ln.slice(5).trimStart());
+                        }
+                    }
+                    const data = dataLines.join('\n');
+
+                    if (eventName === 'done' || data === '[DONE]') {
+                        stopped = true;
+                        break;
+                    }
+                    if (eventName === 'error') {
+                        aiBubble.textContent = (aiText ? aiText + '\n' : '') + '错误: ' + data;
+                        stopped = true;
+                        break;
+                    }
+                    if (eventName === 'token_usage') {
+                        try {
+                            tokenUsageData = JSON.parse(data);
+                        } catch(e) {
+                            console.error('解析token使用数据失败', e);
+                        }
+                        continue;
+                    }
+                    if (data) {
+                        aiText += data;
+                        aiBubble.textContent = aiText;
+                        msgContainer.scrollTop = msgContainer.scrollHeight;
+                    }
+                }
+            }
+            
+            if (tokenUsageData) {
+                appendTokenUsage(aiContainer, tokenUsageData);
+            }
+            
+            loadBalance();
+        } catch (e) {
+            console.error(e);
+            aiBubble.textContent = aiText ? aiText : '网络错误';
+        }
+        sendBtn.disabled = false;
+        sendBtn.textContent = '发送';
+        userInput.focus();
+    }
+    
+    function appendTokenUsage(container, tokenData) {
+        const line = document.createElement('div');
+        line.className = 'token-usage-line';
+        let parts = [];
+        if (tokenData.inputTokens > 0) {
+            parts.push('输入 ' + tokenData.inputTokens + ' tokens');
+        }
+        if (tokenData.outputTokens > 0) {
+            parts.push('输出 ' + tokenData.outputTokens + ' tokens');
+        }
+        if (tokenData.costAmount) {
+            parts.push('消耗 ¥' + parseFloat(tokenData.costAmount).toFixed(4));
+        }
+        line.textContent = parts.join(' · ');
+        container.appendChild(line);
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+    }
     
     // ======== 启动 ========
     init();

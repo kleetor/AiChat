@@ -15,4 +15,14 @@ public class PageController {
     public String chat() {
         return "index";
     }
+
+    @GetMapping("/prompt-hub")
+    public String promptHub() {
+        return "promptHub";
+    }
+
+    @GetMapping("/admin")
+    public String admin() {
+        return "admin";
+    }
 }

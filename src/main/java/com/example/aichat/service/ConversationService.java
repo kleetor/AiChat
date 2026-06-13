@@ -20,10 +20,18 @@ public class ConversationService {
     @Autowired
     private UserRepository userRepository;
 
+    private static final int MAX_CONVERSATIONS = 10;
+
     // 创建新会话（自动设置创建时间和用户）
     public Conversation createConversation(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("用户不存在"));
+        
+        long count = conversationRepository.countByUserId(userId);
+        if (count >= MAX_CONVERSATIONS) {
+            throw new RuntimeException("对话数量已达上限（最多10条）");
+        }
+        
         Conversation conv = Conversation.builder()
                 .user(user)
                 .title("新对话")

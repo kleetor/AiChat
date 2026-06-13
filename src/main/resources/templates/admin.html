@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chat 管理后台</title>
+    <link rel="stylesheet" href="/admin.css">
+</head>
+<body>
+
+<!-- ==================== 登录页 ==================== -->
+<div id="loginPage" class="login-page">
+    <div class="login-box">
+        <h2>AI Chat 管理后台</h2>
+        <p class="subtitle">请使用管理员账号登录</p>
+        <div id="loginError" class="error-msg"></div>
+        <label>用户名</label>
+        <input type="text" id="loginUsername" placeholder="请输入管理员用户名" autocomplete="username">
+        <label>密码</label>
+        <input type="password" id="loginPassword" placeholder="请输入密码" autocomplete="current-password">
+        <button id="loginBtn" onclick="doLogin()">登 录</button>
+    </div>
+</div>
+
+<!-- ==================== 管理后台 ==================== -->
+<div id="adminLayout" class="admin-layout">
+
+    <!-- 侧边栏 -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <span class="logo-icon">AI</span>
+            <span>管理后台</span>
+        </div>
+        <nav class="sidebar-nav">
+            <a class="active" data-page="dashboard" onclick="switchPage('dashboard', this)">
+                <span class="nav-icon">&#x1F4CA;</span> 仪表盘
+            </a>
+            <a data-page="users" onclick="switchPage('users', this)">
+                <span class="nav-icon">&#x1F465;</span> 用户管理
+            </a>
+            <a data-page="sponsors" onclick="switchPage('sponsors', this)">
+                <span class="nav-icon">&#x1F4B0;</span> 赞助审核
+            </a>
+            <a data-page="models" onclick="switchPage('models', this)">
+                <span class="nav-icon">&#x1F916;</span> 模型管理
+            </a>
+            <a data-page="prompts" onclick="switchPage('prompts', this)">
+                <span class="nav-icon">&#x1F4DD;</span> 社区管理
+            </a>
+            <a data-page="usage" onclick="switchPage('usage', this)">
+                <span class="nav-icon">&#x1F4C8;</span> 消费记录
+            </a>
+            <a data-page="conversations" onclick="switchPage('conversations', this)">
+                <span class="nav-icon">&#x1F4AC;</span> 聊天记录
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="user-info" id="adminUserInfo">管理员</div>
+            <button class="logout-btn" onclick="doLogout()">退出登录</button>
+        </div>
+    </aside>
+
+    <!-- 主内容区 -->
+    <div class="main-area">
+        <div class="topbar">
+            <div class="page-title" id="pageTitle">仪表盘</div>
+            <div class="topbar-right">
+                <span>欢迎，<strong id="adminName">admin</strong></span>
+            </div>
+        </div>
+
+        <div class="content">
+
+            <!-- ====== 仪表盘 ====== -->
+            <div id="page-dashboard" class="page-content">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">&#x1F465;</div>
+                        <div class="stat-label">总用户数</div>
+                        <div class="stat-value" id="statTotalUsers">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">&#x2728;</div>
+                        <div class="stat-label">今日新增</div>
+                        <div class="stat-value" id="statTodayUsers">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">&#x23F3;</div>
+                        <div class="stat-label">待审核赞助</div>
+                        <div class="stat-value" id="statPendingReviews">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">&#x1F4B5;</div>
+                        <div class="stat-label">总营收 (元)</div>
+                        <div class="stat-value" id="statTotalRevenue">-</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><h3>系统概览</h3></div>
+                    <div class="stats-grid" style="grid-template-columns: repeat(3,1fr)">
+                        <div class="stat-card"><div class="stat-label">总会话数</div><div class="stat-value" style="font-size:22px" id="statConversations">-</div></div>
+                        <div class="stat-card"><div class="stat-label">总消息数</div><div class="stat-value" style="font-size:22px" id="statMessages">-</div></div>
+                        <div class="stat-card"><div class="stat-label">今日消息</div><div class="stat-value" style="font-size:22px" id="statTodayMsg">-</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ====== 用户管理 ====== -->
+            <div id="page-users" class="page-content" style="display:none">
+                <div class="card">
+                    <div class="card-header"><h3>用户列表</h3></div>
+                    <div class="search-bar">
+                        <input type="text" id="userSearchInput" placeholder="搜索用户名或邮箱..." onkeydown="if(event.key==='Enter') loadUsers()">
+                        <button class="btn btn-primary" onclick="loadUsers()">搜索</button>
+                    </div>
+                    <div class="table-wrap"><table>
+                        <thead><tr>
+                            <th>ID</th><th>用户名</th><th>邮箱</th><th>PID</th><th>余额</th><th>角色</th><th>状态</th><th>操作</th>
+                        </tr></thead>
+                        <tbody id="userTableBody"></tbody>
+                    </table></div>
+                    <div class="pagination" id="userPagination"></div>
+                </div>
+            </div>
+
+            <!-- ====== 赞助审核 ====== -->
+            <div id="page-sponsors" class="page-content" style="display:none">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>赞助审核列表</h3>
+                        <select id="sponsorStatusFilter" onchange="loadSponsors()">
+                            <option value="PENDING">待审核</option>
+                            <option value="APPROVED">已通过</option>
+                            <option value="REJECTED">已拒绝</option>
+                            <option value="">全部</option>
+                        </select>
+                    </div>
+                    <div class="table-wrap"><table>
+                        <thead><tr>
+                            <th>订单号</th><th>用户PID</th><th>用户名</th><th>金额</th><th>截图</th><th>状态</th><th>备注</th><th>上传时间</th><th>操作</th>
+                        </tr></thead>
+                        <tbody id="sponsorTableBody"></tbody>
+                    </table></div>
+                    <div class="pagination" id="sponsorPagination"></div>
+                </div>
+            </div>
+
+            <!-- ====== 模型管理 ====== -->
+            <div id="page-models" class="page-content" style="display:none">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>模型配置</h3>
+                        <button class="btn btn-primary" onclick="openModelModal()">+ 新增模型</button>
+                    </div>
+                    <div class="table-wrap"><table>
+                        <thead><tr>
+                            <th>显示名称</th><th>模型名</th><th>API URL</th><th>API Key</th><th>输入价格</th><th>输出价格</th><th>操作</th>
+                        </tr></thead>
+                        <tbody id="modelTableBody"></tbody>
+                    </table></div>
+                </div>
+            </div>
+
+            <!-- ====== 社区管理 ====== -->
+            <div id="page-prompts" class="page-content" style="display:none">
+                <div class="card">
+                    <div class="card-header"><h3>提示词社区</h3></div>
+                    <div class="search-bar">
+                        <input type="text" id="promptSearchInput" placeholder="搜索提示词..." onkeydown="if(event.key==='Enter') loadPrompts()">
+                        <button class="btn btn-primary" onclick="loadPrompts()">搜索</button>
+                    </div>
+                    <div class="table-wrap"><table>
+                        <thead><tr>
+                            <th>ID</th><th>名称</th><th>内容</th><th>上传者</th><th>点赞</th><th>精选</th><th>操作</th>
+                        </tr></thead>
+                        <tbody id="promptTableBody"></tbody>
+                    </table></div>
+                    <div class="pagination" id="promptPagination"></div>
+                </div>
+            </div>
+
+            <!-- ====== 消费记录 ====== -->
+            <div id="page-usage" class="page-content" style="display:none">
+                <div class="card">
+                    <div class="card-header"><h3>消费记录</h3></div>
+                    <div class="search-bar">
+                        <div class="search-row">
+                            <input type="text" id="usageUserId" placeholder="用户ID（可选）" style="width:150px">
+                            <input type="date" id="usageStartDate" style="width:160px">
+                            <span>至</span>
+                            <input type="date" id="usageEndDate" style="width:160px">
+                            <button class="btn btn-primary" onclick="loadUsage()">查询</button>
+                        </div>
+                    </div>
+                    <div class="table-wrap"><table>
+                        <thead><tr>
+                            <th>用户ID</th><th>模型</th><th>输入Tokens</th><th>输出Tokens</th><th>消费金额</th><th>时间</th>
+                        </tr></thead>
+                        <tbody id="usageTableBody"></tbody>
+                    </table></div>
+                    <div class="pagination" id="usagePagination"></div>
+                </div>
+            </div>
+
+            <!-- ====== 聊天记录 ====== -->
+            <div id="page-conversations" class="page-content" style="display:none">
+                <div class="card">
+                    <div class="card-header"><h3>聊天记录</h3></div>
+                    <div class="search-bar">
+                        <div class="search-row">
+                            <input type="text" id="convUserId" placeholder="用户ID（可选）" style="width:150px">
+                            <button class="btn btn-primary" onclick="loadConversations()">查询</button>
+                        </div>
+                    </div>
+                    <div class="table-wrap"><table>
+                        <thead><tr>
+                            <th>会话ID</th><th>标题</th><th>创建时间</th><th>操作</th>
+                        </tr></thead>
+                        <tbody id="convTableBody"></tbody>
+                    </table></div>
+                    <div class="pagination" id="convPagination"></div>
+                </div>
+                <!-- 聊天详情弹窗 -->
+                <div id="chatDetailModal" class="modal-overlay" onclick="closeChatDetail(event)">
+                    <div class="modal" style="width:700px" onclick="event.stopPropagation()">
+                        <h3>聊天详情</h3>
+                        <div class="chat-thread" id="chatDetailContent"></div>
+                        <div class="modal-btns"><button class="btn btn-outline" onclick="closeChatDetail()">关闭</button></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- ==================== 通用模态框 ==================== -->
+<!-- 余额编辑 -->
+<div id="balanceModal" class="modal-overlay" onclick="closeBalanceModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <h3>编辑余额</h3>
+        <label>金额（正数增加，负数扣减）</label>
+        <input type="number" id="balanceAmount" step="0.01" placeholder="例如：100.00">
+        <label>原因</label>
+        <textarea id="balanceReason" placeholder="请输入操作原因"></textarea>
+        <div class="modal-btns">
+            <button class="btn btn-outline" onclick="closeBalanceModal()">取消</button>
+            <button class="btn btn-primary" onclick="submitBalance()">确认</button>
+        </div>
+    </div>
+</div>
+
+<!-- 角色变更 -->
+<div id="roleModal" class="modal-overlay" onclick="closeRoleModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <h3>变更角色</h3>
+        <label>角色</label>
+        <select id="roleSelect">
+            <option value="USER">普通用户</option>
+            <option value="ADMIN">管理员</option>
+        </select>
+        <div class="modal-btns">
+            <button class="btn btn-outline" onclick="closeRoleModal()">取消</button>
+            <button class="btn btn-primary" onclick="submitRole()">确认</button>
+        </div>
+    </div>
+</div>
+
+<!-- 赞助审核-通过 -->
+<div id="approveModal" class="modal-overlay" onclick="closeApproveModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <h3>审核通过</h3>
+        <label>发放金额（元）</label>
+        <input type="number" id="approveAmount" step="0.01" placeholder="请输入发放金额">
+        <label>备注</label>
+        <textarea id="approveComment" placeholder="审核备注"></textarea>
+        <div class="modal-btns">
+            <button class="btn btn-outline" onclick="closeApproveModal()">取消</button>
+            <button class="btn btn-success" onclick="submitApprove()">确认通过</button>
+        </div>
+    </div>
+</div>
+
+<!-- 赞助审核-拒绝 -->
+<div id="rejectModal" class="modal-overlay" onclick="closeRejectModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <h3>审核拒绝</h3>
+        <label>拒绝原因</label>
+        <textarea id="rejectComment" placeholder="请输入拒绝原因"></textarea>
+        <div class="modal-btns">
+            <button class="btn btn-outline" onclick="closeRejectModal()">取消</button>
+            <button class="btn btn-danger" onclick="submitReject()">确认拒绝</button>
+        </div>
+    </div>
+</div>
+
+<!-- 模型编辑 -->
+<div id="modelModal" class="modal-overlay" onclick="closeModelModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <h3 id="modelModalTitle">新增模型</h3>
+        <input type="hidden" id="modelEditId">
+        <div class="form-group">
+            <label>显示名称</label>
+            <input type="text" id="modelDisplayName" placeholder="如：GPT-4">
+        </div>
+        <div class="form-group">
+            <label>模型名</label>
+            <input type="text" id="modelModelName" placeholder="如：gpt-4">
+        </div>
+        <div class="form-group">
+            <label>API URL</label>
+            <input type="text" id="modelApiUrl" placeholder="API地址">
+        </div>
+        <div class="form-group">
+            <label>API Key</label>
+            <input type="text" id="modelApiKey" placeholder="API密钥">
+        </div>
+        <div class="form-group">
+            <label>输入价格 (元/1000 tokens)</label>
+            <input type="number" id="modelInputPrice" step="0.000001" placeholder="0.001">
+        </div>
+        <div class="form-group">
+            <label>输出价格 (元/1000 tokens)</label>
+            <input type="number" id="modelOutputPrice" step="0.000001" placeholder="0.002">
+        </div>
+        <div class="modal-btns">
+            <button class="btn btn-outline" onclick="closeModelModal()">取消</button>
+            <button class="btn btn-primary" onclick="submitModel()">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- 图片预览 -->
+<div id="imgPreview" class="img-preview-modal" onclick="this.style.display='none'">
+    <img id="imgPreviewSrc" src="">
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<script src="/admin.js"></script>
+</body>
+</html>
