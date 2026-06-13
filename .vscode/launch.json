@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-AichatApplication<aichat>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "com.example.aichat.AichatApplication",
+            "projectName": "aichat",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}
