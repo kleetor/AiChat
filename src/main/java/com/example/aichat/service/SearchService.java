@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -16,6 +18,8 @@ import java.util.Map;
 
 @Service
 public class SearchService {
+
+    private static final Logger logger = LoggerFactory.getLogger(SearchService.class);
 
     @Value("${qianfan.api.key}")
     private String apiKey;
@@ -31,7 +35,7 @@ public class SearchService {
         this.objectMapper = objectMapper;
     }
 
-    public List<Map<String, Object>> search(String query, boolean summary, String freshness, int count) {
+    public List<Map<String, Object>> search(String query, int count) {
         ObjectNode requestBody = objectMapper.createObjectNode();
         
         ArrayNode messagesArray = objectMapper.createArrayNode();
@@ -81,13 +85,13 @@ public class SearchService {
             }
             return searchResults;
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("搜索失败", e);
             throw new RuntimeException("搜索失败：" + e.getMessage());
         }
     }
 
     public String searchAsMarkdown(String query, int count) {
-        List<Map<String, Object>> results = search(query, true, "noLimit", count);
+        List<Map<String, Object>> results = search(query, count);
         
         StringBuilder markdown = new StringBuilder();
         markdown.append("## 搜索结果\n\n");

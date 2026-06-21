@@ -4,12 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>提示词社区</title>
+    <link rel="stylesheet" href="/theme.css">
     <link rel="stylesheet" th:href="@{/app.css}">
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
     <div class="hub-container">
         <div class="hub-header">
-            <h1>✨ 提示词社区</h1>
+            <h1><i data-lucide="sparkles"></i> 提示词社区</h1>
             <div class="header-actions">
                 <span id="userDisplay"></span>
                 <button id="btnLogout" class="auth-btn">退出</button>
@@ -18,7 +20,7 @@
         </div>
 
         <div class="upload-section">
-            <button id="uploadBtn" class="upload-btn">📤 上传提示词</button>
+            <button id="uploadBtn" class="upload-btn"><i data-lucide="upload"></i> 上传提示词</button>
         </div>
 
         <div class="prompts-grid" id="promptsGrid"></div>
@@ -31,7 +33,7 @@
 
     <div class="modal-overlay" id="uploadModal">
         <div class="modal">
-            <h2>📤 上传提示词</h2>
+            <h2><i data-lucide="upload"></i> 上传提示词</h2>
             <div class="form-group">
                 <label>选择要上传的提示词</label>
                 <select id="promptSelect">
@@ -60,9 +62,9 @@
             </div>
             <div class="detail-content">
                 <div class="detail-meta">
-                    <span class="meta-item">👤 <span id="detailAuthor"></span></span>
-                    <span class="meta-item">❤️ <span id="detailLikes"></span></span>
-                    <span class="meta-item">📅 <span id="detailDate"></span></span>
+                    <span class="meta-item"><img id="detailAvatar" class="avatar-mini" src="" alt=""> <span id="detailAuthor"></span></span>
+                    <span class="meta-item"><i data-lucide="heart"></i> <span id="detailLikes"></span></span>
+                    <span class="meta-item"><i data-lucide="calendar"></i> <span id="detailDate"></span></span>
                 </div>
                 <div class="detail-image" id="detailImage"></div>
                 <div class="detail-section">
@@ -75,12 +77,47 @@
                 </div>
             </div>
             <div class="detail-actions">
-                <button class="like-btn" id="likeBtn">❤️ 点赞</button>
-                <button class="download-btn" id="downloadBtn">⬇️ 下载到我的提示词</button>
+                <button class="like-btn" id="likeBtn"><i data-lucide="heart"></i> 点赞</button>
+                <button class="download-btn" id="downloadBtn"><i data-lucide="download"></i> 下载到我的提示词</button>
+            </div>
+            <!-- 评论区 -->
+            <div class="comments-section" id="commentsSection">
+                <h3><i data-lucide="message-square"></i> 评论</h3>
+                <div id="commentsList"></div>
+                <div class="comment-input-row" id="commentInputRow">
+                    <textarea id="commentInput" placeholder="发表评论..." rows="1"></textarea>
+                    <button id="commentSubmitBtn">发布</button>
+                </div>
+                <div class="reply-hint" id="replyHint">
+                    回复中，<a id="cancelReply">取消</a>
+                </div>
             </div>
         </div>
     </div>
 
+    <!-- 个人名片模态框 -->
+    <div class="modal-overlay" id="userCardModal">
+        <div class="user-card-box">
+            <div class="user-card-header">
+                <img id="cardAvatar" class="user-card-avatar" src="" alt="">
+                <div class="user-card-info">
+                    <h2 id="cardUsername"></h2>
+                    <span class="user-card-pid">PID: <span id="cardPid"></span></span>
+                </div>
+            </div>
+            <p class="user-card-signature" id="cardSignature"></p>
+            <div class="user-card-stats">
+                <div class="card-stat"><span class="stat-num" id="cardShareCount">0</span><span class="stat-label">分享</span></div>
+                <div class="card-stat"><span class="stat-num" id="cardTotalLikes">0</span><span class="stat-label">获赞</span></div>
+            </div>
+            <button id="cardAddFriendBtn" class="card-add-friend-btn" data-user-id="" style="display:none;"><i data-lucide="user-plus"></i> 申请好友</button>
+            <button class="btn-secondary" id="closeUserCard" style="width:100%;margin-top:16px;">关闭</button>
+        </div>
+    </div>
+
+    <script src="/common.js"></script>
+    <script src="/api-paths.js"></script>
     <script th:src="@{/promptHub.js}"></script>
+    <script>lucide.createIcons();</script>
 </body>
 </html>

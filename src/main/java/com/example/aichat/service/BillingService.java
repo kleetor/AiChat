@@ -12,7 +12,6 @@ import jakarta.persistence.OptimisticLockException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -239,16 +238,6 @@ public class BillingService {
 
         logger.info("管理员 {} 手动调整用户 {} 余额: {}, 原因: {}", reviewerId, userId, amount, reason);
         return order;
-    }
-
-    /** 定时清理超过5分钟的过期预扣记录，退还预扣金额 */
-    @Scheduled(fixedRate = 60000)
-    public void cleanExpiredReservations() {
-        // 预扣记录已通过 deductTokens 正常消费时移除。
-        // 若请求异常中断（如 AI 调用超时），预扣会残留，此处仅做安全兜底日志记录。
-        if (!reservations.isEmpty()) {
-            logger.warn("存在未消费的预扣记录 {} 条，将在后续 deductTokens 中被清理", reservations.size());
-        }
     }
 
     @Transactional

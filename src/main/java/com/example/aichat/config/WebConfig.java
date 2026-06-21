@@ -54,6 +54,7 @@ public class WebConfig implements WebMvcConfigurer {
         // 赞助相关图片目录映射
         addUploadResourceMapping(registry, "uploads/Storepic", "/uploads/Storepic");
         addUploadResourceMapping(registry, "uploads/upStorepic", "/uploads/upStorepic");
+        addUploadResourceMapping(registry, "uploads/userPic", "/uploads/userPic");
     }
 
     private void addUploadResourceMapping(ResourceHandlerRegistry registry, String dir, String urlPrefix) {

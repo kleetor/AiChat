@@ -21,4 +21,9 @@ public interface PromptsHubRepository extends JpaRepository<PromptsHub, Long> {
 
     @Query("SELECT p FROM PromptsHub p WHERE p.name LIKE %:keyword% OR p.content LIKE %:keyword%")
     Page<PromptsHub> searchByKeyword(@Param("keyword") String keyword, Pageable pageable);
+
+    long countByUserId(Long userId);
+
+    @Query("SELECT COALESCE(SUM(p.likesCount), 0) FROM PromptsHub p WHERE p.userId = :userId")
+    int sumLikesByUserId(@Param("userId") Long userId);
 }

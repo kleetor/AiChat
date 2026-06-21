@@ -3,15 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 聊天 - 提示词管理</title>
+    <title>AiChat</title>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="/theme.css">
     <link rel="stylesheet" th:href="@{/app.css}">
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
 
 <div class="app-container">
     <!-- 头部 -->
     <div class="header">
-        <h1>💬 AI 聊天</h1>
+        <button class="mobile-menu-btn" id="mobileMenuBtn" title="菜单"><i data-lucide="menu"></i></button>
+        <h1><i data-lucide="message-circle"></i> AiChat </h1>
         <div class="user-info">
             <!-- 当前提示词指示器 -->
             <span id="currentPromptIndicator" class="current-prompt-indicator">
@@ -27,28 +31,38 @@
             <label class="search-toggle">
                 <input type="checkbox" id="webSearchToggle">
                 <span class="toggle-slider"></span>
-                <span class="toggle-label">🌐 联网搜索</span>
+                <span class="toggle-label"><i data-lucide="globe" class="toggle-icon"></i> 联网搜索</span>
             </label>
             <span id="userDisplay"></span>
-            <span id="balanceIndicator" class="balance-indicator" style="display:none;">💰 <span id="balanceAmount">0.0000</span> 元</span>
-            <button id="btnPrompt" class="auth-btn">📝 提示词</button>
-            <button id="btnModel" class="auth-btn">🤖 模型</button>
-            <button id="btnLogin" class="auth-btn">登录</button>
-            <button id="btnLogout" class="auth-btn btn-logout">退出</button>
+            <span id="balanceIndicator" class="balance-indicator" style="display:none;"><i data-lucide="wallet" class="balance-icon"></i> <span id="balanceAmount">0.0000</span> 元</span>
+            <select id="kbSelector">
+                <option value="">不使用</option>
+            </select>
+            <button id="btnKB" class="auth-btn" onclick="window.open('/kb-manager','_blank')" style="display:none;"><i data-lucide="book-open"></i> 知识库</button>
+            <button id="btnMemory" class="auth-btn" onclick="window.open('/memory-manager','_blank')"><i data-lucide="brain"></i> 记忆</button>
+            <button id="btnPrompt" class="auth-btn"><i data-lucide="file-text"></i> 提示词</button>
+            <button id="btnMessage" class="auth-btn"><i data-lucide="message-circle"></i> 消息</button>
+            <button id="btnFriend" class="auth-btn"><i data-lucide="users"></i> 好友</button>
+            <button id="btnModel" class="auth-btn"><i data-lucide="bot"></i> 模型</button>
+            <button id="btnLogin" class="auth-btn"><i data-lucide="log-in"></i> 登录</button>
+            <button id="btnLogout" class="auth-btn btn-logout"><i data-lucide="log-out"></i> 退出</button>
         </div>
     </div>
+
+    <!-- 侧边栏遮罩 (移动端) -->
+    <div class="sidebar-mask" id="sidebarMask"></div>
 
     <!-- 主体 -->
     <div class="main-area">
         <!-- 侧边栏会话 -->
         <div class="sidebar">
             <div class="sidebar-header">
-                <h3>💬 会话</h3>
-                <button id="newConvBtn">＋ 新建</button>
+                <h3><i data-lucide="message-circle"></i> 会话</h3>
+                <button id="newConvBtn"><i data-lucide="plus"></i> 新建</button>
             </div>
             <div class="conversation-list" id="convList"></div>
             <div class="sidebar-footer">
-                <button id="btnSettings" class="settings-btn">⚙️ 设置</button>
+                <button id="btnSettings" class="settings-btn"><i data-lucide="settings"></i> 设置</button>
             </div>
         </div>
 
@@ -56,13 +70,21 @@
         <div class="chat-area">
             <div class="messages" id="msgContainer">
                 <div class="welcome" id="welcomeMsg">
-                    <h2>👋 欢迎使用</h2>
+                    <h2><i data-lucide="hand"></i> 欢迎使用</h2>
                     <p>请登录后选择或新建一个会话，然后选择AI模型开始对话。</p>
                 </div>
             </div>
+            <div id="uploadPreview" class="upload-preview" style="display:none;">
+                <img id="previewImg" src="" alt="预览">
+                <span class="preview-label">图片已上传，识别结果将随消息发送</span>
+                <button id="removePreviewBtn" class="remove-preview">&times;</button>
+            </div>
             <div class="input-area">
-                <input type="text" id="userInput" placeholder="请先登录并选择模型配置..." disabled>
-                <button id="sendBtn" disabled>发送</button>
+                <textarea id="userInput" placeholder="请先登录并选择模型配置..." disabled rows="1"></textarea>
+                <input type="file" id="imageInput" accept="image/*" style="display:none;">
+                <button id="uploadBtn" disabled title="上传图片"><i data-lucide="image"></i></button>
+                <button id="sendBtn" disabled><i data-lucide="send"></i> 发送</button>
+                <button id="stopBtn" style="display:none;"><i data-lucide="stop-circle"></i> 停止</button>
             </div>
         </div>
     </div>
@@ -130,11 +152,11 @@
 <!-- 提示词管理模态框 -->
 <div class="modal-overlay prompt-modal" id="promptModal">
     <div class="modal">
-        <h2>📝 自定义提示词</h2>
+        <h2><i data-lucide="file-text"></i> 自定义提示词</h2>
         <div class="prompt-list" id="promptList"></div>
         <div style="display:flex; gap:12px; margin-bottom:12px;">
-            <button class="new-prompt-btn" id="newPromptBtn">＋ 新建提示词</button>
-            <button class="hub-prompt-btn" id="hubPromptBtn">🌐 获取/上传提示词</button>
+            <button class="new-prompt-btn" id="newPromptBtn"><i data-lucide="plus"></i> 新建提示词</button>
+            <button class="hub-prompt-btn" id="hubPromptBtn"><i data-lucide="globe"></i> 获取/上传提示词</button>
         </div>
         <div style="text-align:right;margin-top:12px;">
             <button class="btn-primary" style="width:auto;padding:8px 20px;" id="closePromptModalBtn">关闭</button>
@@ -164,7 +186,7 @@
 <!-- 模型选择模态框 -->
 <div class="modal-overlay prompt-modal" id="modelModal">
     <div class="modal">
-        <h2>🤖 选择模型</h2>
+        <h2><i data-lucide="bot"></i> 选择模型</h2>
         <div class="model-list" id="modelList"></div>
         <div style="text-align:right;margin-top:12px;">
             <button class="btn-primary" style="width:auto;padding:8px 20px;" id="closeModelModalBtn">关闭</button>
@@ -175,16 +197,25 @@
 <!-- 设置模态框 -->
 <div class="modal-overlay" id="settingsModal">
     <div class="modal" style="max-width: 500px;">
-        <h2>⚙️ 设置</h2>
+        <h2><i data-lucide="settings"></i> 设置</h2>
 
         <!-- 设置标签页 -->
         <div class="settings-tabs">
-            <button class="tab-btn active" data-tab="profile">👤 个人信息</button>
-            <button class="tab-btn" data-tab="wallet">💰 我的钱包</button>
+            <button class="tab-btn active" data-tab="profile"><i data-lucide="user"></i> 个人信息</button>
+            <button class="tab-btn" data-tab="wallet"><i data-lucide="wallet"></i> 我的钱包</button>
         </div>
 
         <!-- 个人信息标签 -->
         <div class="tab-content active" id="profile-tab">
+            <div class="avatar-section">
+                <div class="avatar-wrapper">
+                    <img id="avatarImg" class="avatar-img" src="" alt="头像">
+                    <div class="avatar-overlay">
+                        <input type="file" id="avatarFileInput" accept="image/*" style="display:none;">
+                        <span id="avatarUploadHint">点击更换</span>
+                    </div>
+                </div>
+            </div>
             <div class="profile-info">
                 <div class="info-row">
                     <span class="info-label">用户名</span>
@@ -198,8 +229,22 @@
                     <span class="info-label">用户PID</span>
                     <span class="info-value" id="settingsPid"></span>
                 </div>
+                <div class="info-row signature-row">
+                    <span class="info-label">个性签名</span>
+                    <div class="signature-edit">
+                        <input type="text" id="settingsSignature" class="signature-input" placeholder="写下你的个性签名..." maxlength="200">
+                        <button id="btnSaveSignature" class="signature-save-btn">保存</button>
+                    </div>
+                    <span id="signatureSaved" class="signature-saved" style="display:none;"><i data-lucide="check"></i> 已保存</span>
+                </div>
             </div>
-            <button class="change-password-btn" id="btnChangePassword">🔒 修改密码</button>
+            <button class="change-password-btn" id="btnChangePassword"><i data-lucide="lock"></i> 修改密码</button>
+            <div class="user-prompts-section">
+                <h4><i data-lucide="share-2"></i> 我的分享</h4>
+                <div id="userPromptsList" class="user-prompts-list">
+                    <div class="prompt-empty">暂无分享</div>
+                </div>
+            </div>
         </div>
 
         <!-- 钱包标签 -->
@@ -207,7 +252,7 @@
             <div class="wallet-card">
                 <h3>当前余额</h3>
                 <div class="balance-big">¥ <span id="settingsBalance">0.0000</span></div>
-                <button id="btnSponsor" class="btn-primary sponsor-btn">💝 赞助</button>
+                <button id="btnSponsor" class="btn-primary sponsor-btn"><i data-lucide="heart"></i> 赞助</button>
             </div>
             <div style="margin-top:24px;">
                 <h4>消费记录</h4>
@@ -224,7 +269,7 @@
 <!-- 修改密码模态框 - 第一步：验证原密码 -->
 <div class="modal-overlay" id="verifyPasswordModal">
     <div class="modal" style="max-width: 400px;">
-        <h2>🔒 验证原密码</h2>
+        <h2><i data-lucide="lock"></i> 验证原密码</h2>
         <div class="form-group">
             <label>请输入当前密码</label>
             <input type="password" id="verifyCurrentPassword" placeholder="请输入当前密码">
@@ -240,7 +285,7 @@
 <!-- 修改密码模态框 - 第二步：设置新密码 -->
 <div class="modal-overlay" id="newPasswordModal">
     <div class="modal" style="max-width: 400px;">
-        <h2>🔑 设置新密码</h2>
+        <h2><i data-lucide="key"></i> 设置新密码</h2>
         <div class="form-group">
             <label>新密码</label>
             <input type="password" id="newPassword" placeholder="请输入新密码（至少6位）">
@@ -259,24 +304,24 @@
 <!-- 赞助模态框 -->
 <div class="modal-overlay" id="sponsorModal">
     <div class="modal" style="max-width: 600px;">
-        <h2>💝 赞助支持</h2>
+        <h2><i data-lucide="heart"></i> 赞助支持</h2>
         <p style="color:#6b7280; font-size:13px; text-align:center; margin-bottom:16px;">
             请扫描下方收款码进行赞助，完成后上传赞助截图，管理员审核后将为您发放对应 Token。注意上传的赞助截图需要备注您的用户PID。
         </p>
         <div class="sponsor-layout">
             <!-- 左侧：收款码 -->
             <div class="sponsor-left">
-                <h4>📱 微信收款码</h4>
+                <h4><i data-lucide="smartphone"></i> 微信收款码</h4>
                 <img src="/uploads/Storepic/weixinPic.png" alt="收款码" class="sponsor-qrcode" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
                 <p class="sponsor-qrcode-fallback" style="display:none; color:#9ca3af; font-size:13px; padding:20px;">收款码图片加载中...</p>
                 <p style="font-size:12px; color:#9ca3af; margin-top:8px;">请使用微信扫描二维码</p>
             </div>
             <!-- 右侧：上传截图 -->
             <div class="sponsor-right">
-                <h4>📎 上传赞助截图</h4>
+                <h4><i data-lucide="paperclip"></i> 上传赞助截图</h4>
                 <div class="upload-area" id="sponsorUploadArea">
                     <div class="upload-placeholder" id="sponsorUploadPlaceholder">
-                        <span style="font-size:36px;">📷</span>
+                        <span style="font-size:36px;"><i data-lucide="camera"></i></span>
                         <p>点击或拖拽上传赞助截图</p>
                         <p style="font-size:12px; color:#9ca3af;">支持 PNG / JPG / GIF，最大 5MB</p>
                     </div>
@@ -284,11 +329,11 @@
                     <img id="sponsorPreview" style="display:none; max-width:100%; max-height:200px; border-radius:8px; margin:0 auto;">
                 </div>
                 <div style="margin-top:12px;">
-                    <label style="font-size:13px; color:#374151; display:block; margin-bottom:4px;">💰 赞助金额（元）</label>
+                    <label style="font-size:13px; color:#374151; display:block; margin-bottom:4px;"><i data-lucide="wallet"></i> 赞助金额（元）</label>
                     <input type="number" id="sponsorAmount" placeholder="请输入赞助金额" step="0.01" min="0.01"
                            style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; box-sizing:border-box;">
                 </div>
-                <button class="btn-primary" id="btnSponsorCreate" style="margin-top:12px; width:100%;">📤 创建赞助审核</button>
+                <button class="btn-primary" id="btnSponsorCreate" style="margin-top:12px; width:100%;"><i data-lucide="upload"></i> 创建赞助审核</button>
                 <div id="sponsorError" class="error-msg"></div>
                 <div id="sponsorSuccess" class="success-msg" style="display:none;"></div>
             </div>
@@ -299,6 +344,158 @@
     </div>
 </div>
 
+<!-- 消息通知模态框 -->
+<div class="modal-overlay" id="messageModal">
+    <div class="modal" style="max-width:420px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h2 style="margin:0;"><i data-lucide="message-circle"></i> 消息</h2>
+            <a id="markAllReadBtn" style="font-size:13px; color:#666; cursor:pointer;">全部已读</a>
+        </div>
+        <div id="messageList" style="max-height:50vh; overflow-y:auto;"></div>
+        <div style="text-align:center; margin-top:12px;">
+            <a id="closeMessageModalBtn" style="color:#6b7280; cursor:pointer; font-size:14px;">关闭</a>
+        </div>
+    </div>
+</div>
+
+<!-- 头像裁剪模态框 -->
+<div class="modal-overlay" id="cropModal">
+    <div class="crop-modal-box">
+        <h3><i data-lucide="scissors"></i> 裁剪头像</h3>
+        <p class="crop-hint">拖拽图片调整位置，滑动滚轮或拖动滑块缩放</p>
+        <div class="crop-viewport" id="cropViewport">
+            <img id="cropImage" draggable="false">
+            <div class="crop-mask"></div>
+            <div class="crop-frame"></div>
+        </div>
+        <div class="crop-toolbar">
+            <input type="range" id="cropZoom" min="50" max="300" value="100" step="1">
+            <div class="crop-actions">
+                <button id="cropCancel" class="btn-secondary" style="flex:1;">取消</button>
+                <button id="cropConfirm" class="btn-primary" style="flex:1;">确认裁剪</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 好友模态框 -->
+<div class="modal-overlay" id="friendModal">
+    <div class="friend-layout">
+        <!-- 左侧好友列表 -->
+        <div class="friend-sidebar" id="friendSidebar">
+            <div class="friend-sidebar-header">
+                <span class="friend-sidebar-title">好友列表</span>
+                <button class="friend-close-btn mobile-only" id="friendCloseBtn" title="关闭">&times;</button>
+            </div>
+            <div class="friend-list" id="friendList">
+                <div class="friend-empty">暂无好友</div>
+            </div>
+            <div class="friend-sidebar-footer">
+                <button id="btnAddFriend" class="friend-add-btn"><i data-lucide="user-plus"></i> 添加</button>
+                <button id="btnFriendRequests" class="friend-requests-btn">
+                    <i data-lucide="mail"></i> 申请
+                    <span id="friendRequestBadge" class="friend-badge" style="display:none;">0</span>
+                </button>
+            </div>
+        </div>
+        <!-- 右侧聊天区 -->
+        <div class="friend-chat-area" id="friendChatArea">
+            <div class="friend-chat-placeholder" id="friendChatPlaceholder">
+                <i data-lucide="users"></i> 选择一个好友开始聊天
+            </div>
+            <div class="friend-chat-panel" id="friendChatPanel" style="display:none;">
+                <div class="friend-chat-header">
+                    <button class="friend-back-btn" id="friendBackBtn" title="返回好友列表"><i data-lucide="chevron-left"></i></button>
+                    <span id="friendChatName"></span>
+                    <button class="friend-chat-close-btn mobile-only" id="friendChatCloseBtn" title="关闭">&times;</button>
+                </div>
+                <div class="friend-messages" id="friendMessages"></div>
+                <div class="friend-input-area">
+                    <textarea id="friendInput" placeholder="输入消息..." rows="1" disabled></textarea>
+                    <button id="friendSendBtn" disabled>发送</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加好友模态框 -->
+<div class="modal-overlay" id="addFriendModal">
+    <div class="modal" style="max-width:480px;">
+        <h2><i data-lucide="search"></i> 添加好友</h2>
+        <div class="search-friend-input">
+            <input type="text" id="friendSearchInput" placeholder="输入用户名或PID搜索...">
+            <button id="friendSearchBtn" class="btn-primary" style="padding:8px 16px;">搜索</button>
+        </div>
+        <div class="friend-search-results" id="friendSearchResults">
+            <div class="friend-empty">输入关键词搜索用户</div>
+        </div>
+        <button id="closeAddFriend" class="btn-secondary" style="width:100%;margin-top:12px;">关闭</button>
+    </div>
+</div>
+
+<!-- 好友申请列表模态框 -->
+<div class="modal-overlay" id="friendRequestsModal">
+    <div class="modal" style="max-width:480px;">
+        <h2><i data-lucide="mail"></i> 好友申请</h2>
+        <div class="friend-requests-list" id="friendRequestsList">
+            <div class="friend-empty">暂无好友申请</div>
+        </div>
+        <button id="closeFriendRequests" class="btn-secondary" style="width:100%;margin-top:12px;">关闭</button>
+    </div>
+</div>
+
+<!-- 欢迎模态框 -->
+<div class="modal-overlay" id="welcomeModal">
+    <div class="modal" style="max-width:560px;text-align:center;">
+        <div style="font-size:48px;margin-bottom:8px;"><i data-lucide="hand" style="width:48px;height:48px;"></i></div>
+        <h2 style="margin-bottom:6px;">欢迎来到 AI Chat</h2>
+        <p style="color:#6b7280;font-size:14px;margin-bottom:20px;">一站式智能聊天平台</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:left;margin-bottom:20px;">
+            <div style="background:#f0f4ff;border-radius:10px;padding:12px 14px;">
+                <div style="font-weight:600;font-size:14px;color:#4f46e5;"><i data-lucide="message-circle"></i> 智能对话</div>
+                <div style="font-size:12px;color:#6b7280;margin-top:4px;">多模型支持 · 流式响应 · 联网搜索 · 图片识别</div>
+            </div>
+            <div style="background:#f0fdf4;border-radius:10px;padding:12px 14px;">
+                <div style="font-weight:600;font-size:14px;color:#059669;"><i data-lucide="file-text"></i> 提示词 & 社区</div>
+                <div style="font-size:12px;color:#6b7280;margin-top:4px;">自定义提示词 · 社区分享 · 精选推荐</div>
+            </div>
+            <div style="background:#fef3c7;border-radius:10px;padding:12px 14px;">
+                <div style="font-weight:600;font-size:14px;color:#d97706;"><i data-lucide="book-open"></i> 知识库 RAG</div>
+                <div style="font-size:12px;color:#6b7280;margin-top:4px;">文档上传 · 自动向量化 · 语义检索</div>
+            </div>
+            <div style="background:#ede9fe;border-radius:10px;padding:12px 14px;">
+                <div style="font-weight:600;font-size:14px;color:#7c3aed;"><i data-lucide="brain"></i> 长期记忆</div>
+                <div style="font-size:12px;color:#6b7280;margin-top:4px;">自动提取 · 衰减维护 · 语义回溯</div>
+            </div>
+            <div style="background:#fce7f3;border-radius:10px;padding:12px 14px;">
+                <div style="font-weight:600;font-size:14px;color:#db2777;"><i data-lucide="users"></i> 好友私聊</div>
+                <div style="font-size:12px;color:#6b7280;margin-top:4px;">PID搜索 · 好友申请 · 实时消息</div>
+            </div>
+            <div style="background:#f3f4f6;border-radius:10px;padding:12px 14px;">
+                <div style="font-weight:600;font-size:14px;color:#4b5563;"><i data-lucide="settings"></i> 管理后台</div>
+                <div style="font-size:12px;color:#6b7280;margin-top:4px;">用户管理 · 模型配置 · 赞助审核 · 数据统计</div>
+            </div>
+        </div>
+        <button class="btn-primary" onclick="closeWelcome()" style="font-size:15px;padding:12px 48px;">开始使用</button>
+    </div>
+</div>
+
+<!-- 移动端更多菜单面板 -->
+<div class="mobile-menu-panel" id="mobileMenuPanel">
+    <div class="mobile-menu-header">
+        <span>菜单</span>
+        <button class="mobile-menu-close" id="mobileMenuCloseBtn">&times;</button>
+    </div>
+    <div class="mobile-menu-body" id="mobileMenuBody">
+        <!-- 由 JS 动态填充 -->
+    </div>
+</div>
+<div class="mobile-menu-mask" id="mobileMenuMask"></div>
+
+<script src="/common.js"></script>
+<script src="/api-paths.js"></script>
 <script th:src="@{/app.js}"></script>
+<script>lucide.createIcons();</script>
 </body>
 </html>

@@ -25,4 +25,14 @@ public class PageController {
     public String admin() {
         return "admin";
     }
+
+    @GetMapping("/kb-manager")
+    public String kbManager() {
+        return "kbManager";
+    }
+
+    @GetMapping("/memory-manager")
+    public String memoryManager() {
+        return "memoryManager";
+    }
 }

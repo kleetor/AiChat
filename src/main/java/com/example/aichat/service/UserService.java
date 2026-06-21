@@ -142,6 +142,20 @@ public class UserService {
         }
     }
 
+    public void updateSignature(Long userId, String signature) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("用户不存在"));
+        user.setSignature(signature);
+        userRepository.save(user);
+    }
+
+    public void updateAvatar(Long userId, String avatarUrl) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("用户不存在"));
+        user.setAvatarUrl(avatarUrl);
+        userRepository.save(user);
+    }
+
     public void sendResetCode(String usernameOrEmail) {
         User user = null;
         logger.info("尝试通过用户名查找用户: {}", usernameOrEmail);

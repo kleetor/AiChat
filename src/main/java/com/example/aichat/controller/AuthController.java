@@ -4,25 +4,41 @@ import com.example.aichat.dto.AuthResponse;
 import com.example.aichat.dto.LoginRequest;
 import com.example.aichat.dto.RegisterRequest;
 import com.example.aichat.model.User;
+import com.example.aichat.repository.FriendshipRepository;
+import com.example.aichat.repository.PromptsHubRepository;
 import com.example.aichat.service.EmailService;
 import com.example.aichat.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
+    @Value("${upload.user-pic-dir:./uploads/userPic}")
+    private String userPicDir;
 
     @Autowired
     private UserService userService;
 
     @Autowired
     private EmailService emailService;
+
+    @Autowired
+    private PromptsHubRepository promptsHubRepository;
+
+    @Autowired
+    private FriendshipRepository friendshipRepository;
 
     @PostMapping("/send-code")
     public ResponseEntity<Map<String, Object>> sendCode(@RequestBody Map<String, String> request) {
@@ -76,8 +92,91 @@ public class AuthController {
                 "username", user.getUsername(),
                 "email", user.getEmail(),
                 "pid", user.getPid(),
+                "signature", user.getSignature() != null ? user.getSignature() : "",
+                "avatarUrl", user.getAvatarUrl() != null ? user.getAvatarUrl() : "",
                 "balance", user.getBalance()
         ));
+    }
+
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<?> getUserCard(@PathVariable Long userId,
+                                         Authentication auth) {
+        User user = userService.getUserById(userId);
+        long shareCount = promptsHubRepository.countByUserId(userId);
+        int totalLikes = promptsHubRepository.sumLikesByUserId(userId);
+        // 检查好友状态
+        String friendStatus = "NONE";
+        if (auth != null && auth.getPrincipal() != null) {
+            Long currentUserId = (Long) auth.getPrincipal();
+            if (!currentUserId.equals(userId)) {
+                if (friendshipRepository.existsActiveRelation(currentUserId, userId)) {
+                    // 进一步判断是 ACCEPTED 还是 PENDING
+                    var fsOpt1 = friendshipRepository.findByUserIdAndFriendId(currentUserId, userId);
+                    var fsOpt2 = friendshipRepository.findByUserIdAndFriendId(userId, currentUserId);
+                    var fs = fsOpt1.isPresent() ? fsOpt1.get() : fsOpt2.orElse(null);
+                    if (fs != null) {
+                        friendStatus = fs.getStatus();
+                    }
+                }
+            }
+        }
+        return ResponseEntity.ok(Map.of(
+                "username", user.getUsername(),
+                "pid", user.getPid(),
+                "signature", user.getSignature() != null ? user.getSignature() : "",
+                "avatarUrl", user.getAvatarUrl() != null ? user.getAvatarUrl() : "",
+                "shareCount", shareCount,
+                "totalLikes", totalLikes,
+                "friendStatus", friendStatus
+        ));
+    }
+
+    @PostMapping("/update-profile")
+    public ResponseEntity<?> updateProfile(@RequestBody Map<String, String> request,
+                                           Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        String signature = request.get("signature");
+        if (signature != null && signature.length() > 200) {
+            return ResponseEntity.badRequest().body(Map.of("message", "签名长度不能超过200个字符"));
+        }
+        userService.updateSignature(userId, signature);
+        return ResponseEntity.ok(Map.of("message", "更新成功"));
+    }
+
+    @PostMapping("/upload-avatar")
+    public ResponseEntity<?> uploadAvatar(@RequestParam("file") MultipartFile file,
+                                          Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "请选择图片"));
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            return ResponseEntity.badRequest().body(Map.of("message", "只允许上传图片"));
+        }
+        try {
+            String resolvedDir = userPicDir;
+            if (!new File(userPicDir).isAbsolute()) {
+                resolvedDir = System.getProperty("user.dir") + File.separator + userPicDir;
+            }
+            File dirFile = new File(resolvedDir);
+            if (!dirFile.exists()) {
+                dirFile.mkdirs();
+            }
+            String ext = ".png";
+            String originalName = file.getOriginalFilename();
+            if (originalName != null && originalName.contains(".")) {
+                ext = originalName.substring(originalName.lastIndexOf("."));
+            }
+            String fileName = "avatar_" + userId + "_" + UUID.randomUUID().toString().substring(0, 8) + ext;
+            File target = new File(dirFile, fileName);
+            file.transferTo(target);
+            String avatarUrl = "/uploads/userPic/" + fileName;
+            userService.updateAvatar(userId, avatarUrl);
+            return ResponseEntity.ok(Map.of("avatarUrl", avatarUrl));
+        } catch (IOException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "上传失败"));
+        }
     }
 
     @PostMapping("/change-password")

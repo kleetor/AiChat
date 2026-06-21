@@ -1,0 +1,107 @@
+/* ==========================================
+   AI Chat 全局主题变量
+   统一管理颜色、圆角、阴影等视觉令牌
+   为未来暗色模式切换预留扩展点
+   ========================================== */
+
+:root {
+  /* ---- 主色调 ---- */
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-light: #e0e7ff;
+  --primary-bg: #f0f4ff;
+
+  /* ---- 语义色 ---- */
+  --success: #22c55e;
+  --success-light: #d1fae5;
+  --success-dark: #065f46;
+
+  --warning: #f59e0b;
+  --warning-light: #fef3c7;
+  --warning-dark: #92400e;
+
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --danger-light: #fee2e2;
+  --danger-bg: #fef2f2;
+
+  /* ---- 中性色 ---- */
+  --text-primary: #333333;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --text-inverse: #ffffff;
+
+  --bg-page: #f8f9fa;
+  --bg-card: #ffffff;
+  --bg-hover: #f5f5f5;
+  --bg-active: #f0f0f0;
+  --bg-input: #ffffff;
+
+  /* ---- 边框 ---- */
+  --border: #e5e7eb;
+  --border-light: #f0f0f0;
+  --border-focus: #999999;
+  --border-primary: #c7d2fe;
+
+  /* ---- 圆角 ---- */
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 50%;
+
+  /* ---- 阴影 ---- */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.15);
+
+  /* ---- 间距 ---- */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+
+  /* ---- 字体 ---- */
+  --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 20px;
+
+  /* ---- 过渡 ---- */
+  --transition: 0.2s ease;
+
+  /* ---- 移动端断点 (仅作参考文档) ---- */
+  --bp-mobile-sm: 480px;
+  --bp-mobile-md: 768px;
+  --bp-mobile-lg: 1024px;
+}
+
+/* ==========================================
+   移动端全局基础适配
+   ========================================== */
+
+/* iOS 安全区域适配 */
+@supports (padding: env(safe-area-inset-bottom)) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+/* 全局触摸友好：所有可交互元素最小 44px */
+@media (max-width: 768px) {
+  button, select,
+  .auth-btn, .btn-primary, .btn-secondary, .btn-danger,
+  .tab-btn, .close-btn, .settings-btn,
+  .conv-item, .prompt-card, .mem-item, .kb-card, .friend-item {
+    min-height: 44px;
+  }
+}
+
+/* 移动端简化：减少新拟物化性能开销 */
+@media (max-width: 768px) {
+  .modal-overlay { backdrop-filter: none; background: rgba(30,35,45,0.6); }
+}

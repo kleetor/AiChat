@@ -52,5 +52,15 @@ public class ChatHistoryService {
         response.setMessages(records);
         return response;
     }
+
+    // 删除单条消息（需权限校验）
+    public void deleteMessage(Long messageId, Long userId) {
+        ChatMessage msg = chatMessageRepository.findById(messageId)
+                .orElseThrow(() -> new RuntimeException("消息不存在"));
+        if (!msg.getUser().getId().equals(userId)) {
+            throw new RuntimeException("无权删除此消息");
+        }
+        chatMessageRepository.delete(msg);
+    }
 }
 

@@ -1,5 +1,6 @@
 package com.example.aichat.model;
 
+import com.example.aichat.config.ApiKeyEncryptor;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -20,6 +21,7 @@ public class ModelConfig {
     private Long id;
 
     @Column(nullable = false)
+    @Convert(converter = ApiKeyEncryptor.class)
     private String apiKey;
 
     @Column(nullable = false)

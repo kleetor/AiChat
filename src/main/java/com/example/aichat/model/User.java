@@ -18,8 +18,7 @@ public class User {
     private Long id;
 
     @Version
-    @Builder.Default
-    private Long version = 0L;
+    private Long version;
 
     @Column(nullable = false, unique = true)
     private String username;
@@ -40,6 +39,12 @@ public class User {
     @Column(nullable = false, length = 20)
     @Builder.Default
     private String role = "USER";
+
+    @Column(length = 200)
+    private String signature;
+
+    @Column(name = "avatar_url", length = 500)
+    private String avatarUrl;
 
     @Column(nullable = false)
     @Builder.Default

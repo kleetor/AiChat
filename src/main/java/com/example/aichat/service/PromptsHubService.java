@@ -2,7 +2,9 @@ package com.example.aichat.service;
 
 import com.example.aichat.model.PromptsHub;
 import com.example.aichat.model.User;
+import com.example.aichat.model.UserLike;
 import com.example.aichat.repository.PromptsHubRepository;
+import com.example.aichat.repository.UserLikeRepository;
 import com.example.aichat.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,12 +14,16 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class PromptsHubService {
+
+    private static final int DAILY_LIKE_LIMIT = 10;
 
     private static final Set<String> ALLOWED_IMAGE_TYPES = Set.of(
             "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"
@@ -28,6 +34,12 @@ public class PromptsHubService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private UserLikeRepository userLikeRepository;
+
+    @Autowired
+    private NotificationService notificationService;
 
     @Value("${upload.dir:./uploads/images}")
     private String uploadDir;
@@ -72,11 +84,37 @@ public class PromptsHubService {
     }
 
     @Transactional
-    public void likePrompt(Long id) {
+    public void likePrompt(Long id, Long userId) {
         if (!promptsHubRepository.existsById(id)) {
             throw new RuntimeException("提示词不存在");
         }
+        // 重复点赞
+        if (userLikeRepository.existsByUserIdAndTargetTypeAndTargetId(userId, "PROMPT", id)) {
+            throw new RuntimeException("已经点过赞了");
+        }
+        // 每日上限
+        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+        long todayCount = userLikeRepository.countTodayByUserAndType(userId, "PROMPT", todayStart);
+        if (todayCount >= DAILY_LIKE_LIMIT) {
+            throw new RuntimeException("每日点赞已达上限（" + DAILY_LIKE_LIMIT + "次）");
+        }
         promptsHubRepository.incrementLikes(id);
+        userLikeRepository.save(UserLike.builder()
+                .userId(userId)
+                .targetType("PROMPT")
+                .targetId(id)
+                .build());
+
+        // 发送通知
+        PromptsHub hub = promptsHubRepository.findById(id).orElse(null);
+        User user = userRepository.findById(userId).orElse(null);
+        if (hub != null && user != null) {
+            notificationService.create(userId, user.getUsername(),
+                    hub.getUserId(), "PROMPT_LIKE",
+                    user.getUsername() + " 点赞了你的提示词",
+                    hub.getName(),
+                    id, null);
+        }
     }
 
     public List<PromptsHub> getUserUploadedPrompts(Long userId) {

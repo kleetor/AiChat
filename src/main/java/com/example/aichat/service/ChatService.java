@@ -2,11 +2,15 @@ package com.example.aichat.service;
 
 import com.example.aichat.model.ChatMessage;
 import com.example.aichat.model.Conversation;
+import com.example.aichat.model.ConversationSummary;
+import com.example.aichat.model.MemoryItem;
 import com.example.aichat.model.ModelConfig;
 import com.example.aichat.model.Prompt;
 import com.example.aichat.model.TokenUsage;
 import com.example.aichat.repository.ChatMessageRepository;
 import com.example.aichat.repository.ConversationRepository;
+import com.example.aichat.repository.ConversationSummaryRepository;
+import com.example.aichat.repository.MemoryItemRepository;
 import com.example.aichat.repository.ModelConfigRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,6 +30,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.stream.Collectors;
 
 import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
@@ -46,10 +51,17 @@ public class ChatService {
     private final PromptService promptService;
     private final ModelConfigRepository modelConfigRepository;
     private final SearchService searchService;
+    private final TavilySearchService tavilySearchService;
     private final CloseableHttpClient httpClient;
     private final ExecutorService chatExecutorService;
     private final ObjectMapper objectMapper;
     private final BillingService billingService;
+    private final ChromaDBService chromaDBService;
+    private final MemoryService memoryService;
+    private final SummaryService summaryService;
+    private final ConversationSummaryRepository summaryRepo;
+    private final MemoryItemRepository memoryRepo;
+    private final LLMService llmService;
 
     public ChatService(RestTemplate restTemplate,
                       ChatHistoryService chatHistoryService,
@@ -58,9 +70,16 @@ public class ChatService {
                       PromptService promptService,
                       ModelConfigRepository modelConfigRepository,
                       SearchService searchService,
+                      TavilySearchService tavilySearchService,
                       CloseableHttpClient httpClient,
                       ExecutorService chatExecutorService,
-                      BillingService billingService) {
+                      BillingService billingService,
+                      ChromaDBService chromaDBService,
+                      MemoryService memoryService,
+                      SummaryService summaryService,
+                      ConversationSummaryRepository summaryRepo,
+                      MemoryItemRepository memoryRepo,
+                      LLMService llmService) {
         this.restTemplate = restTemplate;
         this.chatHistoryService = chatHistoryService;
         this.chatMessageRepository = chatMessageRepository;
@@ -68,10 +87,17 @@ public class ChatService {
         this.promptService = promptService;
         this.modelConfigRepository = modelConfigRepository;
         this.searchService = searchService;
+        this.tavilySearchService = tavilySearchService;
         this.httpClient = httpClient;
         this.chatExecutorService = chatExecutorService;
         this.objectMapper = new ObjectMapper();
         this.billingService = billingService;
+        this.chromaDBService = chromaDBService;
+        this.memoryService = memoryService;
+        this.summaryService = summaryService;
+        this.summaryRepo = summaryRepo;
+        this.memoryRepo = memoryRepo;
+        this.llmService = llmService;
     }
 
     /**
@@ -102,14 +128,16 @@ public class ChatService {
     }
 
     /**
-     * 构建消息数组（包括 prompt、历史消息、搜索结果、当前用户消息）
+     * 构建消息数组（含 prompt、长期记忆、知识库、摘要、历史、搜索、图片、当前消息）
      */
     private ArrayNode buildMessagesArray(Long conversationId, Long promptId, 
-                                          String userMessage, boolean webSearchEnabled) {
+                                          String userMessage, boolean webSearchEnabled,
+                                          String imageDescription, Long knowledgeBaseId,
+                                          Long userId, Boolean longMemoryEnabled) {
         ArrayNode messagesArray = objectMapper.createArrayNode();
         List<ChatMessage> history = getRecentHistory(conversationId);
 
-        // 添加 prompt（系统提示词）
+        // 1. 注入 Prompt (用户个人提示词)
         if (promptId != null) {
             try {
                 Prompt prompt = promptService.getPromptById(promptId);
@@ -118,6 +146,68 @@ public class ChatService {
                 systemNode.put("content", prompt.getContent());
             } catch (Exception e) {
                 logger.warn("提示词加载失败: {}", e.getMessage());
+            }
+        }
+
+        // 2. 注入长期记忆 — 最近N条清晰期/模糊期记忆 (时间倒序)
+        if (userId != null && Boolean.TRUE.equals(longMemoryEnabled)) {
+            try {
+                List<MemoryItem> memories = memoryService.getRecentMemoriesForContext(userId);
+                if (!memories.isEmpty()) {
+                    StringBuilder sb = new StringBuilder("【关于用户的已知信息（最近）】\n");
+                    for (var m : memories) {
+                        sb.append("- ").append(m.getValue()).append("\n");
+                    }
+                    ObjectNode memNode = messagesArray.addObject();
+                    memNode.put("role", "system");
+                    memNode.put("content", sb.toString());
+
+                    // 注入即访问: 批量刷新 lastAccessedAt
+                    List<Long> touchedIds = memories.stream().map(MemoryItem::getId).collect(Collectors.toList());
+                    memoryService.touchMemories(touchedIds);
+                }
+            } catch (Exception e) {
+                logger.warn("长期记忆注入失败: {}", e.getMessage());
+            }
+        }
+
+        // 3. 注入对话摘要
+        if (Boolean.TRUE.equals(longMemoryEnabled)) {
+            try {
+                ConversationSummary summary = summaryRepo.findByConversationId(conversationId);
+                if (summary != null && summary.getSummary() != null) {
+                    ObjectNode sumNode = messagesArray.addObject();
+                    sumNode.put("role", "system");
+                    sumNode.put("content", "【历史对话摘要】\n" + summary.getSummary());
+                }
+            } catch (Exception e) {
+                logger.warn("对话摘要注入失败: {}", e.getMessage());
+            }
+        }
+
+        // 4. 注入知识库检索
+        if (knowledgeBaseId != null) {
+            try {
+                ChromaDBService.QueryResult qr = chromaDBService.query(
+                        knowledgeBaseId, userMessage, 5);
+                if (qr != null && !qr.isEmpty()) {
+                    StringBuilder ctx = new StringBuilder(
+                            "以下是与用户问题相关的知识库内容，请基于这些内容回答：\n\n");
+                    for (var item : qr.items()) {
+                        String fileName = item.metadata() != null
+                                ? String.valueOf(item.metadata().getOrDefault("file_name", "未知"))
+                                : "未知";
+                        ctx.append("【来源: ").append(fileName).append("】\n")
+                           .append(item.document()).append("\n\n");
+                    }
+                    ctx.append("回答时请注明引用来源（文件名）。");
+                    ObjectNode kbNode = messagesArray.addObject();
+                    kbNode.put("role", "system");
+                    kbNode.put("content", ctx.toString());
+                    logger.info("知识库检索注入成功: kbId={}, results={}", knowledgeBaseId, qr.size());
+                }
+            } catch (Exception e) {
+                logger.warn("知识库检索失败: kbId={}", knowledgeBaseId, e);
             }
         }
 
@@ -132,16 +222,32 @@ public class ChatService {
             assistantNode.put("content", msg.getAiReply());
         }
 
-        // 添加联网搜索结果
+        // 添加联网搜索结果（优先使用 Tavily，失败后回退到百度千帆）
         if (webSearchEnabled) {
             try {
-                String searchResults = searchService.searchAsMarkdown(userMessage, 5);
+                String searchResults = tavilySearchService.searchAsMarkdown(userMessage, 5);
                 ObjectNode searchContextNode = messagesArray.addObject();
                 searchContextNode.put("role", "system");
-                searchContextNode.put("content", "最新搜索信息：\n" + searchResults);
+                searchContextNode.put("content", "最新搜索信息（Tavily）：\n" + searchResults);
+                logger.info("联网搜索(Tavily)成功，查询: {}", userMessage);
             } catch (Exception e) {
-                logger.warn("联网搜索失败: {}", e.getMessage());
+                logger.warn("Tavily 搜索失败，回退到百度千帆: {}", e.getMessage());
+                try {
+                    String searchResults = searchService.searchAsMarkdown(userMessage, 5);
+                    ObjectNode searchContextNode = messagesArray.addObject();
+                    searchContextNode.put("role", "system");
+                    searchContextNode.put("content", "最新搜索信息：\n" + searchResults);
+                } catch (Exception e2) {
+                    logger.warn("百度千帆搜索也失败: {}", e2.getMessage());
+                }
             }
+        }
+
+        // 添加图片识别描述（作为系统消息插入，让主模型理解这是图片内容）
+        if (imageDescription != null && !imageDescription.isBlank()) {
+            ObjectNode imageContextNode = messagesArray.addObject();
+            imageContextNode.put("role", "system");
+            imageContextNode.put("content", imageDescription);
         }
 
         // 添加当前用户消息
@@ -152,24 +258,25 @@ public class ChatService {
         return messagesArray;
     }
 
-    public TokenUsageResult chatAndSave(Long conversationId, String userMessage, Long promptId, Long modelConfigId) {
-        return chatAndSave(conversationId, userMessage, promptId, modelConfigId, false, null);
-    }
-
-    public TokenUsageResult chatAndSave(Long conversationId, String userMessage, Long promptId, 
-                              Long modelConfigId, boolean webSearchEnabled) {
-        return chatAndSave(conversationId, userMessage, promptId, modelConfigId, webSearchEnabled, null);
-    }
-
-    public TokenUsageResult chatAndSave(Long conversationId, String userMessage, Long promptId, 
-                              Long modelConfigId, boolean webSearchEnabled, Long userId) {
+    public LLMService.TokenUsageResult chatAndSave(Long conversationId, String userMessage, Long promptId, 
+                              Long modelConfigId, boolean webSearchEnabled, Long userId,
+                              String imageDescription, Long knowledgeBaseId,
+                              Boolean longMemoryEnabled) {
         ModelConfig config = validateAndGetConfig(conversationId, modelConfigId);
         ArrayNode messagesArray = buildMessagesArray(conversationId, promptId, 
-                                                       userMessage, webSearchEnabled);
+                                                       userMessage, webSearchEnabled,
+                                                       imageDescription, knowledgeBaseId,
+                                                       userId, longMemoryEnabled);
 
-        TokenUsageResult result = callDeepSeekAsyncWithUsage(messagesArray, config).join();
+        LLMService.TokenUsageResult result = llmService.callAsyncWithUsage(messagesArray, config).join();
         chatHistoryService.saveMessage(conversationId, userMessage, result.getReply());
         updateConversationTitleIfNeeded(conversationId, userMessage);
+
+        // 异步: 记忆提取 + 摘要生成
+        if (userId != null && Boolean.TRUE.equals(longMemoryEnabled)) {
+            memoryService.extractAndStore(userId, conversationId, userMessage, result.getReply());
+            summaryService.checkAndGenerate(conversationId);
+        }
 
         if (userId != null) {
             try {
@@ -186,53 +293,41 @@ public class ChatService {
         return result;
     }
 
-    public static class TokenUsageResult {
-        private final String reply;
-        private final long inputTokens;
-        private final long outputTokens;
-        private BigDecimal costAmount;
-
-        public TokenUsageResult(String reply, long inputTokens, long outputTokens) {
-            this.reply = reply;
-            this.inputTokens = inputTokens;
-            this.outputTokens = outputTokens;
-        }
-
-        public String getReply() { return reply; }
-        public long getInputTokens() { return inputTokens; }
-        public long getOutputTokens() { return outputTokens; }
-        public BigDecimal getCostAmount() { return costAmount; }
-        public void setCostAmount(BigDecimal costAmount) { this.costAmount = costAmount; }
-    }
-
     /**
      * 流式聊天：使用 Spring 官方 SseEmitter，自动处理缓冲、心跳、客户端断开等
      */
-    public SseEmitter chatStream(Long conversationId, String userMessage, Long promptId, Long modelConfigId) {
-        return chatStream(conversationId, userMessage, promptId, modelConfigId, false, null);
-    }
-
     public SseEmitter chatStream(Long conversationId, String userMessage, Long promptId, 
-                                  Long modelConfigId, boolean webSearchEnabled) {
-        return chatStream(conversationId, userMessage, promptId, modelConfigId, webSearchEnabled, null);
-    }
-
-    public SseEmitter chatStream(Long conversationId, String userMessage, Long promptId, 
-                                  Long modelConfigId, boolean webSearchEnabled, Long userId) {
+                                  Long modelConfigId, boolean webSearchEnabled, Long userId,
+                                  String imageDescription, Long knowledgeBaseId,
+                                  Boolean longMemoryEnabled) {
         ModelConfig config = validateAndGetConfig(conversationId, modelConfigId);
         ArrayNode messagesArray = buildMessagesArray(conversationId, promptId, 
-                                                       userMessage, webSearchEnabled);
+                                                       userMessage, webSearchEnabled,
+                                                       imageDescription, knowledgeBaseId,
+                                                       userId, longMemoryEnabled);
 
-        return streamDeepSeek(messagesArray, config, conversationId, userMessage, userId);
+        return streamDeepSeek(messagesArray, config, conversationId, userMessage, userId, longMemoryEnabled);
     }
 
     private SseEmitter streamDeepSeek(ArrayNode messages, ModelConfig config, 
-                                       Long conversationId, String userMessage, Long userId) {
+                                       Long conversationId, String userMessage, Long userId,
+                                       Boolean longMemoryEnabled) {
         SseEmitter emitter = new SseEmitter(120_000L);
         String apiUrl = config.getApiUrl();
         String apiKey = config.getApiKey();
         String modelName = config.getModelName();
         Long modelConfigId = config.getId();
+
+        // 诊断：检测 API Key 是否解密失败（仍以 AES: 开头）
+        if (apiKey != null && apiKey.startsWith("AES:")) {
+            logger.error("ModelConfig id={} 的 API Key 解密失败！当前加密密钥与创建配置时的密钥不匹配。"
+                    + "请检查 ENCRYPTION_KEY 环境变量是否与当初一致，或在后台重新保存模型配置以使用当前密钥重新加密。",
+                    modelConfigId);
+        }
+        logger.debug("ChatService 使用 ModelConfig: id={}, displayName={}, apiUrl={}, apiKey前6位={}, model={}",
+                modelConfigId, config.getDisplayName(), apiUrl,
+                apiKey != null ? apiKey.substring(0, Math.min(6, apiKey.length())) : "null",
+                modelName);
 
         Runnable task = () -> {
             long promptTokens = 0;
@@ -355,8 +450,10 @@ public class ChatService {
                     reader.close();
 
                     String completeResponse = fullResponse.toString();
+                    Long savedMessageId = null;
                     if (!completeResponse.isEmpty()) {
-                        chatHistoryService.saveMessage(conversationId, userMessage, completeResponse);
+                        ChatMessage saved = chatHistoryService.saveMessage(conversationId, userMessage, completeResponse);
+                        savedMessageId = saved.getId();
                         updateConversationTitleIfNeeded(conversationId, userMessage);
                     }
 
@@ -385,9 +482,18 @@ public class ChatService {
                         }
                     }
 
+                    // 异步: 记忆提取 + 摘要生成 (不阻塞 SSE done 信号)
+                    if (userId != null && Boolean.TRUE.equals(longMemoryEnabled) && !completeResponse.isEmpty()) {
+                        memoryService.extractAndStore(userId, conversationId, userMessage, completeResponse);
+                        summaryService.checkAndGenerate(conversationId);
+                    }
+
+                    String doneData = savedMessageId != null
+                            ? "{\"done\":true,\"messageId\":" + savedMessageId + "}"
+                            : "[DONE]";
                     emitter.send(SseEmitter.event()
                             .name("done")
-                            .data("[DONE]", MediaType.TEXT_PLAIN));
+                            .data(doneData, MediaType.APPLICATION_JSON));
                     emitter.complete();
                 }
             } catch (Exception e) {
@@ -433,59 +539,5 @@ public class ChatService {
             }
         }
         return false;
-    }
-
-    private CompletableFuture<TokenUsageResult> callDeepSeekAsyncWithUsage(ArrayNode messages, ModelConfig config) {
-        return CompletableFuture.supplyAsync(() -> {
-            String apiUrl = config.getApiUrl();
-            String apiKey = config.getApiKey();
-            String modelName = config.getModelName();
-
-            ObjectNode requestBody = objectMapper.createObjectNode();
-            requestBody.put("model", modelName);
-            requestBody.set("messages", messages);
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(apiKey);
-
-            HttpEntity<String> entity = new HttpEntity<>(requestBody.toString(), headers);
-            try {
-                ResponseEntity<String> response = restTemplate.exchange(
-                        apiUrl,
-                        HttpMethod.POST,
-                        entity,
-                        String.class
-                );
-                JsonNode root = objectMapper.readTree(response.getBody());
-                
-                String content = root.get("choices").get(0).get("message").get("content").asText();
-                
-                long promptTokens = 0;
-                long completionTokens = 0;
-                
-                JsonNode usage = root.get("usage");
-                if (usage != null) {
-                    if (usage.has("prompt_tokens")) {
-                        promptTokens = usage.get("prompt_tokens").asLong();
-                    }
-                    if (usage.has("completion_tokens")) {
-                        completionTokens = usage.get("completion_tokens").asLong();
-                    }
-                }
-                
-                if (promptTokens == 0 && completionTokens == 0 && content != null && !content.isEmpty()) {
-                    String allMessagesText = messages.toString();
-                    promptTokens = Math.round(allMessagesText.length() * TOKEN_ESTIMATE_RATIO);
-                    completionTokens = Math.round(content.length() * TOKEN_ESTIMATE_RATIO);
-                    logger.warn("API未返回token用量，使用估算值: prompt={}, completion={}", promptTokens, completionTokens);
-                }
-                
-                return new TokenUsageResult(content, promptTokens, completionTokens);
-            } catch (Exception e) {
-                logger.error("调用AI服务失败", e);
-                return new TokenUsageResult("AI回复失败：" + e.getMessage(), 0, 0);
-            }
-        }, chatExecutorService);
     }
 }

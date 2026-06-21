@@ -7,6 +7,7 @@ import com.example.aichat.model.Conversation;
 import com.example.aichat.service.BillingService;
 import com.example.aichat.service.ChatHistoryService;
 import com.example.aichat.service.ChatService;
+import com.example.aichat.service.LLMService;
 import com.example.aichat.service.ConversationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -55,8 +56,10 @@ public class ChatController {
         }
 
         boolean webSearchEnabled = Boolean.TRUE.equals(request.getWebSearchEnabled());
-        ChatService.TokenUsageResult result = chatService.chatAndSave(conversationId, request.getMessage(),
-                request.getPromptId(), request.getModelConfigId(), webSearchEnabled, userId);
+        LLMService.TokenUsageResult result = chatService.chatAndSave(conversationId, request.getMessage(),
+                request.getPromptId(), request.getModelConfigId(), webSearchEnabled, userId,
+                request.getImageDescription(), request.getKnowledgeBaseId(),
+                request.getLongMemoryEnabled());
         ChatResponse response = new ChatResponse();
         response.setReply(result.getReply());
         response.setInputTokens(result.getInputTokens());
@@ -91,7 +94,10 @@ public class ChatController {
                 request.getPromptId(),
                 request.getModelConfigId(),
                 webSearchEnabled,
-                userId
+                userId,
+                request.getImageDescription(),
+                request.getKnowledgeBaseId(),
+                request.getLongMemoryEnabled()
         );
 
         return ResponseEntity.ok()
@@ -137,5 +143,18 @@ public class ChatController {
         }
         conversationService.deleteConversation(id);
         return ResponseEntity.ok().build();
+    }
+
+    // 删除单条消息
+    @DeleteMapping("/chat/messages/{id}")
+    public ResponseEntity<?> deleteMessage(@PathVariable Long id,
+                                           Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        try {
+            chatHistoryService.deleteMessage(id, userId);
+            return ResponseEntity.ok().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(403).body(e.getMessage());
+        }
     }
 }

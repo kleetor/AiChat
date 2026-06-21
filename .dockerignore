@@ -5,9 +5,12 @@ target/*
 .vscode/
 .git/
 .gitignore
-*.md
-.env.example
+**/*.md
+.env*
 node_modules/
 logs/
-uploads/images/
-uploads/upStorepic/
+chroma_data/
+Plans.1.0/
+Plans.2.0/
+SQL/
+uploads/

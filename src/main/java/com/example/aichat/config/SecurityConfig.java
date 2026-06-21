@@ -31,13 +31,17 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/chat", "/prompt-hub").permitAll()
+                        .requestMatchers("/", "/chat", "/prompt-hub", "/kb-manager", "/memory-manager").permitAll()
                         .requestMatchers("/api/auth/send-code", "/api/auth/register", "/api/auth/login",
                         "/api/auth/send-reset-code", "/api/auth/reset-password").permitAll()
                         .requestMatchers("/api/admin/login").permitAll()
                         .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers("/admin", "/admin.html", "/admin.js", "/admin.css").permitAll()
                         .requestMatchers("/app.js", "/app.css", "/promptHub.js").permitAll()
+                        .requestMatchers("/common.js", "/api-paths.js").permitAll()
+                        .requestMatchers("/theme.css", "/memory.css", "/memory.js").permitAll()
+                        .requestMatchers("/kbManager.css", "/kbManager.js").permitAll()
+                        .requestMatchers("/favicon.ico").permitAll()
                         .requestMatchers("/uploads/**").permitAll()
                         .anyRequest().authenticated()
                 )

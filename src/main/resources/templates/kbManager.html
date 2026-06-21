@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知识库管理 - AI Chat</title>
+    <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/kbManager.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+<div class="header">
+    <h1><i data-lucide="book-open"></i> 知识库管理</h1>
+    <a href="/">← 返回聊天</a>
+</div>
+<div class="container">
+    <div class="section-title">
+        <span>我的知识库</span>
+        <button class="btn-primary" onclick="KBManagerPage.showCreateModal()">＋ 新建知识库</button>
+    </div>
+    <div id="kbList"></div>
+
+    <!-- 文档列表区域 -->
+    <div id="docsPanel" style="display:none;margin-top:24px;">
+        <a class="back-link" href="#" onclick="KBManagerPage.backToList();return false;">← 返回知识库列表</a>
+        <div class="section-title">
+            <span id="docsTitle">文档管理</span>
+            <button class="btn-primary" onclick="document.getElementById('fileInput').click()">＋ 上传文档</button>
+        </div>
+        <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+            <p><i data-lucide="folder"></i> 点击或拖拽上传文档（支持 TXT / MD / PDF）</p>
+            <input type="file" id="fileInput" accept=".txt,.md,.pdf" onchange="KBManagerPage.uploadDoc(event)">
+        </div>
+        <div class="doc-list" id="docList">
+            <div class="empty">暂无文档</div>
+        </div>
+    </div>
+</div>
+
+<!-- 新建/编辑知识库模态框 -->
+<div class="modal-overlay" id="kbModal">
+    <div class="modal">
+        <h2 id="kbModalTitle">新建知识库</h2>
+        <label>名称</label>
+        <input type="text" id="kbName" placeholder="例如：公司制度、产品文档">
+        <label>描述（可选）</label>
+        <textarea id="kbDesc" rows="2" placeholder="简要描述这个知识库的用途"></textarea>
+        <div class="error" id="kbError"></div>
+        <div class="btn-row">
+            <button class="btn-secondary" onclick="KBManagerPage.closeKbModal()">取消</button>
+            <button class="btn-primary" id="kbSaveBtn" onclick="KBManagerPage.saveKB()">保存</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/common.js"></script>
+    <script src="/api-paths.js"></script>
+    <script src="/kbManager.js"></script>
+    <script>lucide.createIcons();</script>
+</body>
+</html>
