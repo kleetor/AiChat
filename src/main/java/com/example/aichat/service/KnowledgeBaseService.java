@@ -1,11 +1,15 @@
 package com.example.aichat.service;
 
+import com.example.aichat.config.BusinessException;
 import com.example.aichat.model.KbDocument;
 import com.example.aichat.model.KnowledgeBase;
 import com.example.aichat.repository.KbDocumentRepository;
 import com.example.aichat.repository.KnowledgeBaseRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +36,7 @@ public class KnowledgeBaseService {
     private final TransactionTemplate transactionTemplate;
 
     private static final Path UPLOAD_DIR = Paths.get("./uploads/kb");
+    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
     public KnowledgeBaseService(KnowledgeBaseRepository kbRepo,
                                  KbDocumentRepository docRepo,
@@ -50,6 +55,7 @@ public class KnowledgeBaseService {
 
     /** 创建知识库 + ChromaDB Collection */
     @Transactional
+    @CacheEvict(value = "kbList", key = "#userId")
     public KnowledgeBase create(String name, String description, Long userId) {
         KnowledgeBase kb = kbRepo.save(KnowledgeBase.builder()
                 .name(name).description(description)
@@ -64,23 +70,41 @@ public class KnowledgeBaseService {
     }
 
     /** 用户知识库列表（用 kb_documents 表实时统计，避免计数不同步） */
+    @Cacheable(value = "kbList", key = "#userId")
     public List<KnowledgeBase> listByUser(Long userId) {
         List<KnowledgeBase> kbs = kbRepo.findByUserId(userId);
+        if (kbs.isEmpty()) return kbs;
+
+        // 单次 GROUP BY 聚合查询，消除 N+1
+        List<Long> kbIds = kbs.stream().map(KnowledgeBase::getId).toList();
+        List<Object[]> stats = docRepo.aggregateByKbIds(kbIds);
+        Map<Long, Object[]> statsMap = new HashMap<>();
+        for (Object[] row : stats) {
+            statsMap.put((Long) row[0], row);
+        }
         for (KnowledgeBase kb : kbs) {
-            kb.setDocCount((int) docRepo.countByKbId(kb.getId()));
-            kb.setChunkCount((int) docRepo.sumChunkCountByKbId(kb.getId()));
-            kb.setTotalSize(docRepo.sumFileSizeByKbId(kb.getId()));
+            Object[] s = statsMap.get(kb.getId());
+            if (s != null) {
+                kb.setDocCount(((Number) s[1]).intValue());
+                kb.setChunkCount(((Number) s[2]).intValue());
+                kb.setTotalSize(((Number) s[3]).longValue());
+            } else {
+                kb.setDocCount(0);
+                kb.setChunkCount(0);
+                kb.setTotalSize(0L);
+            }
         }
         return kbs;
     }
 
     /** 编辑知识库 */
     @Transactional
+    @CacheEvict(value = "kbList", key = "#userId")
     public KnowledgeBase update(Long kbId, Long userId, String name, String description) {
         KnowledgeBase kb = kbRepo.findById(kbId)
-                .orElseThrow(() -> new RuntimeException("知识库不存在"));
+                .orElseThrow(() -> BusinessException.notFound("知识库不存在"));
         if (!kb.getUserId().equals(userId)) {
-            throw new RuntimeException("无权修改该知识库");
+            throw BusinessException.forbidden("无权修改该知识库");
         }
         if (name != null) kb.setName(name);
         if (description != null) kb.setDescription(description);
@@ -90,28 +114,41 @@ public class KnowledgeBaseService {
 
     /** 删除知识库 */
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(value = "kbList", key = "#userId"),
+        @CacheEvict(value = "kbDocs", allEntries = true)
+    })
     public void delete(Long kbId, Long userId) {
         KnowledgeBase kb = kbRepo.findById(kbId)
-                .orElseThrow(() -> new RuntimeException("知识库不存在"));
+                .orElseThrow(() -> BusinessException.notFound("知识库不存在"));
         if (!kb.getUserId().equals(userId)) {
-            throw new RuntimeException("无权删除该知识库");
+            throw BusinessException.forbidden("无权删除该知识库");
         }
         chromaDBService.deleteCollection(kbId);
         kbRepo.delete(kb);
     }
 
     /** 上传文档 */
+    @Caching(evict = {
+        @CacheEvict(value = "kbList", key = "#userId"),
+        @CacheEvict(value = "kbDocs", key = "#userId + '_' + #kbId")
+    })
     public KbDocument uploadDocument(Long kbId, Long userId, MultipartFile file) throws IOException {
         KnowledgeBase kb = kbRepo.findById(kbId)
-                .orElseThrow(() -> new RuntimeException("知识库不存在"));
+                .orElseThrow(() -> BusinessException.notFound("知识库不存在"));
         if (!kb.getUserId().equals(userId)) {
-            throw new RuntimeException("无权上传文档到该知识库");
+            throw BusinessException.forbidden("无权上传文档到该知识库");
         }
 
-        // 保存文件到本地
-        final String fileName = file.getOriginalFilename() != null
-                ? file.getOriginalFilename() : "unknown";
+        // 保存文件到本地 (剥离路径，防止路径穿越)
+        final String rawName = file.getOriginalFilename();
+        final String fileName = rawName != null
+                ? java.nio.file.Paths.get(rawName).getFileName().toString()
+                : "unknown";
         final String fileType = getFileType(fileName);
+        if (file.getSize() > MAX_FILE_SIZE) {
+            throw BusinessException.badRequest("文件大小不能超过 10MB");
+        }
         final String storedName = UUID.randomUUID() + "_" + fileName;
         Path targetPath = UPLOAD_DIR.resolve(storedName);
         file.transferTo(targetPath);
@@ -131,24 +168,29 @@ public class KnowledgeBaseService {
     }
 
     /** 文档列表 */
+    @Cacheable(value = "kbDocs", key = "#userId + '_' + #kbId")
     public List<KbDocument> listDocuments(Long kbId, Long userId) {
         KnowledgeBase kb = kbRepo.findById(kbId)
-                .orElseThrow(() -> new RuntimeException("知识库不存在"));
+                .orElseThrow(() -> BusinessException.notFound("知识库不存在"));
         if (!kb.getUserId().equals(userId)) {
-            throw new RuntimeException("无权查看该知识库文档");
+            throw BusinessException.forbidden("无权查看该知识库文档");
         }
         return docRepo.findByKbId(kbId);
     }
 
     /** 删除文档 */
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(value = "kbList", key = "#userId"),
+        @CacheEvict(value = "kbDocs", allEntries = true)
+    })
     public void deleteDocument(Long docId, Long userId) {
         KbDocument doc = docRepo.findById(docId)
-                .orElseThrow(() -> new RuntimeException("文档不存在"));
+                .orElseThrow(() -> BusinessException.notFound("文档不存在"));
         KnowledgeBase kb = kbRepo.findById(doc.getKbId())
-                .orElseThrow(() -> new RuntimeException("知识库不存在"));
+                .orElseThrow(() -> BusinessException.notFound("知识库不存在"));
         if (!kb.getUserId().equals(userId)) {
-            throw new RuntimeException("无权删除该文档");
+            throw BusinessException.forbidden("无权删除该文档");
         }
         chromaDBService.deleteByDocument(doc.getKbId(), doc.getId());
         docRepo.deleteById(doc.getId());
@@ -159,14 +201,18 @@ public class KnowledgeBaseService {
     }
 
     /** 重新索引文档 */
+    @Caching(evict = {
+        @CacheEvict(value = "kbList", key = "#userId"),
+        @CacheEvict(value = "kbDocs", allEntries = true)
+    })
     public void reindex(Long docId, Long userId) {
         transactionTemplate.executeWithoutResult(status -> {
             KbDocument doc = docRepo.findById(docId)
-                    .orElseThrow(() -> new RuntimeException("文档不存在"));
+                    .orElseThrow(() -> BusinessException.notFound("文档不存在"));
             KnowledgeBase kb = kbRepo.findById(doc.getKbId())
-                    .orElseThrow(() -> new RuntimeException("知识库不存在"));
+                    .orElseThrow(() -> BusinessException.notFound("知识库不存在"));
             if (!kb.getUserId().equals(userId)) {
-                throw new RuntimeException("无权操作该文档");
+                throw BusinessException.forbidden("无权操作该文档");
             }
 
             // 删除旧向量

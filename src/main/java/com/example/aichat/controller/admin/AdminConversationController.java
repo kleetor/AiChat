@@ -3,7 +3,6 @@ package com.example.aichat.controller.admin;
 import com.example.aichat.model.ChatMessage;
 import com.example.aichat.model.Conversation;
 import com.example.aichat.service.AdminService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,8 +13,11 @@ import java.util.List;
 @RequestMapping("/api/admin")
 public class AdminConversationController {
 
-    @Autowired
-    private AdminService adminService;
+    private final AdminService adminService;
+
+    public AdminConversationController(AdminService adminService) {
+        this.adminService = adminService;
+    }
 
     @GetMapping("/conversations")
     public ResponseEntity<Page<Conversation>> getConversations(

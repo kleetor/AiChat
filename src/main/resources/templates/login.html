@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - HanaChat</title>
+    <link rel="icon" href="/HanaChat.png">
+    <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" th:href="@{/login.css}">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+<div class="login-page">
+    <div class="floating-icons">
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+    </div>
+    <div class="login-card">
+        <!-- Logo / 标题 -->
+        <div class="login-logo">
+            <i data-lucide="message-circle" class="login-chat-icon"></i>
+            <h1>HanaChat</h1>
+            <p>一站式智能聊天平台</p>
+        </div>
+
+        <!-- 登录表单 -->
+        <div id="loginFormPanel">
+            <h2>登录</h2>
+            <div class="form-group">
+                <label>用户名或邮箱</label>
+                <input type="text" id="loginUsername" placeholder="请输入用户名或邮箱" autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="loginPassword" placeholder="请输入密码" autocomplete="current-password">
+            </div>
+            <div id="loginError" class="error-msg"></div>
+            <button type="button" class="btn-primary" id="loginSubmitBtn">登录</button>
+            <div class="switch">
+                <span>还没有账号？<a id="toRegisterLink">注册</a></span>
+                <span style="margin-left:12px;"><a id="toForgotLink">忘记密码？</a></span>
+            </div>
+        </div>
+
+        <!-- 注册表单 -->
+        <div id="registerFormPanel" style="display:none;">
+            <h2>注册</h2>
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" id="regUsername" placeholder="请输入用户名" autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label>邮箱</label>
+                <input type="email" id="regEmail" placeholder="请输入邮箱" autocomplete="email">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="regPassword" placeholder="请输入密码（至少6位）" autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label>验证码</label>
+                <div class="code-row">
+                    <input type="text" id="regCode" placeholder="6位验证码" maxlength="6">
+                    <button type="button" id="regSendCodeBtn">发送验证码</button>
+                </div>
+            </div>
+            <div id="regError" class="error-msg"></div>
+            <button type="button" class="btn-primary" id="regSubmitBtn">注册</button>
+            <div class="switch">
+                <span>已有账号？<a id="toLoginFromReg">登录</a></span>
+            </div>
+        </div>
+
+        <!-- 重置密码表单 -->
+        <div id="resetFormPanel" style="display:none;">
+            <h2>重置密码</h2>
+            <div class="form-group">
+                <label>用户名或邮箱</label>
+                <input type="text" id="resetUsername" placeholder="请输入用户名或邮箱">
+            </div>
+            <div class="form-group">
+                <label>验证码</label>
+                <div class="code-row">
+                    <input type="text" id="resetCode" placeholder="6位验证码" maxlength="6">
+                    <button type="button" id="resetSendCodeBtn">发送验证码</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>新密码</label>
+                <input type="password" id="resetNewPassword" placeholder="请输入新密码（至少6位）">
+            </div>
+            <div id="resetError" class="error-msg"></div>
+            <button type="button" class="btn-primary" id="resetSubmitBtn">重置密码</button>
+            <div class="switch">
+                <span>想起密码了？<a id="backToLogin">返回登录</a></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/common.js"></script>
+<script src="/api-paths.js"></script>
+<script th:src="@{/login.js}"></script>
+<script>lucide.createIcons();</script>
+</body>
+</html>

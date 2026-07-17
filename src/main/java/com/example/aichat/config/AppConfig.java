@@ -16,9 +16,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import java.util.concurrent.Executor;
 
@@ -27,11 +24,15 @@ public class AppConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(AppConfig.class);
 
-    @Value("${encryption.key:aichat-dev-key-!}")
+    @Value("${encryption.key}")
     private String encryptionKey;
 
     @PostConstruct
     public void initEncryptionKey() {
+        if (encryptionKey == null || encryptionKey.isBlank()) {
+            logger.error("ENCRYPTION_KEY 环境变量未设置，应用无法启动");
+            throw new IllegalStateException("ENCRYPTION_KEY 环境变量未设置，请设置后重启");
+        }
         logger.info("初始化 AES 加密密钥（来源: {})", AESUtil.getKeySource());
         AESUtil.setKey(encryptionKey);
     }
@@ -67,8 +68,16 @@ public class AppConfig {
     }
 
     @Bean
-    public ExecutorService chatExecutorService() {
-        return Executors.newFixedThreadPool(10);
+    public ThreadPoolTaskExecutor chatExecutorService() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(5);
+        executor.setMaxPoolSize(10);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("chat-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
+        return executor;
     }
 
     @Bean

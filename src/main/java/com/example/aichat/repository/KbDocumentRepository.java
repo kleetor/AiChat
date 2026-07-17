@@ -19,4 +19,13 @@ public interface KbDocumentRepository extends JpaRepository<KbDocument, Long> {
 
     @Query("SELECT COALESCE(SUM(d.fileSize), 0) FROM KbDocument d WHERE d.kbId = :kbId")
     long sumFileSizeByKbId(@Param("kbId") Long kbId);
+
+    /**
+     * 单次查询返回所有知识库的统计信息（count, chunkCount, fileSize），消除 N+1。
+     */
+    @Query("SELECT d.kbId AS kbId, COUNT(d) AS docCount, " +
+           "COALESCE(SUM(d.chunkCount), 0) AS chunkCount, " +
+           "COALESCE(SUM(d.fileSize), 0) AS totalSize " +
+           "FROM KbDocument d WHERE d.kbId IN :kbIds GROUP BY d.kbId")
+    List<Object[]> aggregateByKbIds(@Param("kbIds") List<Long> kbIds);
 }

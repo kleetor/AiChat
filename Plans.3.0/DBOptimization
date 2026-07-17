@@ -1,0 +1,163 @@
+================================================================================
+数据库优化计划 v1.0
+================================================================================
+创建日期：2026-06-30
+数据来源：MySQL 8.0.46 真实连接诊断 (localhost:3306, ai_chat_db)
+运行时长：~80h | 总表：18张 | 总数据量：~0.5MB (开发阶段)
+
+================================================================================
+诊断结果摘要
+================================================================================
+
+发现 6 个全表扫描、5 个 Filesort、17 个缺失外键约束、6 个服务器配置问题
+
+================================================================================
+第1优先级：消除全表扫描（索引优化）
+================================================================================
+
+Issue DB-1  🔴 friend_messages 全表扫描
+  当前：WHERE friendship_id=1  → type=ALL (全表扫描11行)
+        ORDER BY created_at → Using filesort
+  修复：
+    ALTER TABLE friend_messages ADD INDEX idx_friendship_time (friendship_id, created_at);
+    ALTER TABLE friend_messages ADD INDEX idx_receiver_read (receiver_id, is_read);
+  验证：EXPLAIN SELECT * FROM friend_messages WHERE friendship_id=1 ORDER BY created_at DESC;
+
+Issue DB-2  🔴 notifications 全表扫描
+  当前：WHERE target_user_id=1 AND is_read=0 → type=ALL + Using filesort
+  修复：
+    ALTER TABLE notifications ADD INDEX idx_user_read_time (target_user_id, is_read, created_at);
+  验证：EXPLAIN SELECT * FROM notifications WHERE target_user_id=1 AND is_read=0 ORDER BY created_at DESC;
+
+Issue DB-3  🔴 user_likes 全表扫描 + 无唯一约束
+  当前：WHERE user_id=1 AND target_type='PROMPT' AND target_id=1 → type=ALL
+        仅应用层防重，存在 race condition 导致重复点赞
+  修复：
+    ALTER TABLE user_likes ADD UNIQUE INDEX uk_user_target (user_id, target_type, target_id);
+  验证：EXPLAIN SELECT * FROM user_likes WHERE user_id=1 AND target_type='PROMPT' AND target_id=1;
+         INSERT 重复记录应报错 Duplicate entry
+
+Issue DB-4  🔴 comments 全表扫描
+  当前：WHERE prompt_id=1 → type=ALL + Using filesort
+  修复：
+    ALTER TABLE comments ADD INDEX idx_prompt (prompt_id);
+    ALTER TABLE comments ADD INDEX idx_parent (parent_id);
+  验证：EXPLAIN SELECT * FROM comments WHERE prompt_id=1 ORDER BY created_at DESC;
+
+Issue DB-5  🟠 chat_messages filesort
+  当前：有 conversation_id 索引但 ORDER BY timestamp 仍用 filesort
+  修复：
+    ALTER TABLE chat_messages ADD INDEX idx_conv_time (conversation_id, timestamp);
+  验证：EXPLAIN SELECT * FROM chat_messages WHERE conversation_id=1 ORDER BY timestamp DESC;
+        Extra 列应不再显示 Using filesort
+
+Issue DB-6  🟠 token_usages 高频查询无索引
+  当前：按用户/按日期范围查询 token 记录无专用索引
+  修复：
+    ALTER TABLE token_usages ADD INDEX idx_user_time (user_id, created_at);
+  验证：EXPLAIN SELECT * FROM token_usages WHERE user_id=1 ORDER BY created_at DESC LIMIT 20;
+
+================================================================================
+第2优先级：消除 Filesort（复合索引优化）
+================================================================================
+
+Issue DB-7  🟠 friendships 按用户+状态查询
+  当前：WHERE user_id=1 AND status='ACCEPTED' → type=ref(已用UK索引)但无专门状态索引
+  修复：
+    ALTER TABLE friendships ADD INDEX idx_user_status (user_id, status);
+  验证：EXPLAIN SELECT * FROM friendships WHERE user_id=1 AND status='ACCEPTED';
+
+Issue DB-8  🟠 friendships 按 friend_id 查询
+  当前：friend_id 无任何索引
+  修复：
+    ALTER TABLE friendships ADD INDEX idx_friend (friend_id);
+  验证：EXPLAIN SELECT * FROM friendships WHERE friend_id=1;
+
+================================================================================
+第3优先级：MySQL服务器参数优化
+================================================================================
+
+Issue DB-9  🔴 expire_logs_days = 0（binlog永不过期）
+  影响：binlog持续增长，最终填满磁盘
+  修复：
+    SET GLOBAL expire_logs_days = 7;
+    SET GLOBAL binlog_expire_logs_seconds = 604800;  -- MySQL 8.0推荐方式
+  同时修改 my.ini/my.cnf 永久生效
+
+Issue DB-10 🟠 long_query_time = 10s（慢查询阈值过高）
+  影响：真正的慢查询无法被记录，性能问题不可见
+  修复：
+    SET GLOBAL long_query_time = 1.0;
+    SET GLOBAL log_slow_extra = ON;   -- 记录额外信息（行扫描数等）
+
+Issue DB-11 🟠 innodb_log_file_size = 50MB
+  影响：写入密集型场景频繁刷盘，写入吞吐量受限
+  修复（需重启MySQL）：
+    my.ini: innodb_log_file_size = 256M
+  注意：修改此参数需要先停止MySQL，删除旧日志文件，再启动
+
+Issue DB-12 🟡 innodb_buffer_pool_size = 128MB
+  影响：Docker分配1GB内存但Buffer Pool只用了128MB，内存利用率低
+  当前：Buffer Pool命中率99.1%，8192页中6918空闲（15%空闲）
+  修复（当前数据量小，可在数据增长后再调）：
+    my.ini: innodb_buffer_pool_size = 512M
+
+Issue DB-13 🟡 innodb_flush_log_at_trx_commit = 1
+  影响：每次事务刷盘，高并发写入时吞吐量低
+  修复（开发/测试环境）：
+    SET GLOBAL innodb_flush_log_at_trx_commit = 2;  -- 每秒刷一次
+  生产环境保持 = 1（数据安全优先）
+
+Issue DB-14 🟡 Aborted_clients = 220（80h内异常断开220次）
+  影响：连接未正常关闭，平均2.7次/h
+  建议：检查应用连接池配置（HikariCP默认值）
+    spring.datasource.hikari.connection-timeout=30000
+    spring.datasource.hikari.maximum-pool-size=20
+    spring.datasource.hikari.idle-timeout=600000
+
+================================================================================
+第4优先级：数据模型一致性
+================================================================================
+
+Issue DB-15 🟡 字符集不统一
+  当前：5个表用 utf8mb4_unicode_ci，12个表用 utf8mb4_0900_ai_ci
+  影响：跨字符集JOIN可能无法使用索引
+  修复（统一为 utf8mb4_0900_ai_ci）：
+    ALTER TABLE chat_messages CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+    ALTER TABLE conversations CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+    ALTER TABLE model_configs CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+    ALTER TABLE prompts CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+    ALTER TABLE users CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+
+Issue DB-16 🟢 17个缺失外键约束（数据量小时影响不大）
+  建议：仅在数据模型稳定后（PromptHUB开发完成后）补充FK
+  原因：FK会降低写入性能，且ddl-auto=update模式下自动建表不会创建FK
+        先通过应用层保证完整性，Flyway迁移脚本中统一添加
+
+================================================================================
+执行顺序
+================================================================================
+
+第1轮（立即执行，在线DDL，不锁表）：
+  DB-1  friend_messages 索引
+  DB-2  notifications 索引
+  DB-3  user_likes 唯一索引
+  DB-4  comments 索引
+  DB-5  chat_messages 复合索引
+  DB-6  token_usages 索引
+  DB-9  expire_logs_days
+  DB-10 long_query_time
+
+第2轮（立即执行，在线DDL）：
+  DB-7  friendships idx_user_status
+  DB-8  friendships idx_friend
+  DB-13 innodb_flush_log_at_trx_commit (开发环境)
+
+第3轮（需安排维护窗口）：
+  DB-15 字符集统一
+  DB-11 innodb_log_file_size (需重启)
+  DB-12 innodb_buffer_pool_size (需重启)
+
+后续跟进：
+  DB-14 连接池配置排查
+  DB-16 FK约束补充 (随Flyway迁移脚本)

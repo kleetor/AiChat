@@ -36,9 +36,15 @@
             <h2><i data-lucide="upload"></i> 上传提示词</h2>
             <div class="form-group">
                 <label>选择要上传的提示词</label>
-                <select id="promptSelect">
-                    <option value="">请选择提示词</option>
-                </select>
+                <div class="custom-select" id="promptSelectWrap">
+                    <button type="button" class="custom-select-trigger" id="promptSelectTrigger" onclick="event.stopPropagation();togglePromptDropdown()">
+                        <span class="custom-select-text">请选择提示词</span>
+                    </button>
+                    <div class="custom-select-dropdown" id="promptSelectDropdown"></div>
+                    <select id="promptSelect" class="sr-only">
+                        <option value="">请选择提示词</option>
+                    </select>
+                </div>
             </div>
             <div class="form-group">
                 <label>留言（可选）</label>

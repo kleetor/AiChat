@@ -1,10 +1,12 @@
 package com.example.aichat.controller.admin;
 
+import com.example.aichat.config.TokenBlacklist;
 import com.example.aichat.dto.AuthResponse;
 import com.example.aichat.dto.LoginRequest;
 import com.example.aichat.model.User;
 import com.example.aichat.repository.UserRepository;
 import com.example.aichat.util.JwtUtil;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,8 +27,11 @@ public class AdminAuthController {
     @Autowired
     private JwtUtil jwtUtil;
 
+    @Autowired
+    private TokenBlacklist tokenBlacklist;
+
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
         User user = userRepository.findByUsername(request.getUsername())
                 .orElse(null);
 
@@ -53,5 +58,14 @@ public class AdminAuthController {
         response.setRole("ADMIN");
         response.setUserId(user.getId());
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@RequestHeader("Authorization") String authHeader) {
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7);
+            tokenBlacklist.blacklist(token);
+        }
+        return ResponseEntity.ok(Map.of("message", "已退出登录"));
     }
 }

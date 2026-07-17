@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AiChat</title>
-    <link rel="icon" href="/favicon.ico">
+    <title>HanaChat</title>
+    <link rel="icon" href="/HanaChat.png">
     <link rel="stylesheet" href="/theme.css">
-    <link rel="stylesheet" th:href="@{/app.css}">
+    <link rel="stylesheet" th:href="@{/app.css?v=2}">
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
@@ -15,7 +15,7 @@
     <!-- 头部 -->
     <div class="header">
         <button class="mobile-menu-btn" id="mobileMenuBtn" title="菜单"><i data-lucide="menu"></i></button>
-        <h1><i data-lucide="message-circle"></i> AiChat </h1>
+        <h1><i data-lucide="message-circle"></i> HanaChat </h1>
         <div class="user-info">
             <!-- 当前提示词指示器 -->
             <span id="currentPromptIndicator" class="current-prompt-indicator">
@@ -90,65 +90,6 @@
     </div>
 </div>
 
-<!-- 登录/注册模态框 -->
-<div class="modal-overlay" id="authModal">
-    <div class="modal">
-        <h2 id="modalTitle">登录</h2>
-        <div class="form-group" id="modalUsernameGroup">
-            <label>用户名</label>
-            <input type="text" id="modalUsername" placeholder="请输入用户名">
-        </div>
-        <div class="form-group" id="modalEmailGroup" style="display:none;">
-            <label>邮箱</label>
-            <input type="email" id="modalEmail" placeholder="请输入邮箱">
-        </div>
-        <div class="form-group" id="modalPasswordGroup">
-            <label>密码</label>
-            <input type="password" id="modalPassword" placeholder="请输入密码">
-        </div>
-        <div class="form-group" id="modalCodeGroup" style="display:none;">
-            <label>验证码</label>
-            <div style="display:flex; gap:8px;">
-                <input type="text" id="modalCode" placeholder="6位验证码" style="flex:1;" maxlength="6">
-                <button id="modalSendCode" style="background:#4f46e5;color:white;border:none;border-radius:12px;padding:10px 16px;cursor:pointer;font-size:13px;white-space:nowrap;">发送验证码</button>
-            </div>
-        </div>
-        <div id="modalError" class="error-msg">错误</div>
-        <button class="btn-primary" id="modalSubmit">登录</button>
-        <div class="switch">
-            <span id="switchText">还没有账号？<a id="switchLink">注册</a></span>
-            <span id="forgotPasswordLink" style="display:none;margin-left:12px;"><a href="#">忘记密码？</a></span>
-        </div>
-    </div>
-</div>
-
-<!-- 重置密码模态框 -->
-<div class="modal-overlay" id="resetPwdModal">
-    <div class="modal">
-        <h2>重置密码</h2>
-        <div class="form-group">
-            <label>用户名或邮箱</label>
-            <input type="text" id="resetUsername" placeholder="请输入用户名或邮箱">
-        </div>
-        <div class="form-group">
-            <label>验证码</label>
-            <div style="display:flex; gap:8px;">
-                <input type="text" id="resetCode" placeholder="6位验证码" style="flex:1;" maxlength="6">
-                <button id="resetSendCode" style="background:#4f46e5;color:white;border:none;border-radius:12px;padding:10px 16px;cursor:pointer;font-size:13px;white-space:nowrap;">发送验证码</button>
-            </div>
-        </div>
-        <div class="form-group">
-            <label>新密码</label>
-            <input type="password" id="resetNewPassword" placeholder="请输入新密码（至少6位）">
-        </div>
-        <div id="resetPwdError" class="error-msg">错误</div>
-        <button class="btn-primary" id="resetPwdSubmit">重置密码</button>
-        <div class="switch">
-            <span>想起密码了？<a id="backToLoginLink" href="#">返回登录</a></span>
-        </div>
-    </div>
-</div>
-
 <!-- 提示词管理模态框 -->
 <div class="modal-overlay prompt-modal" id="promptModal">
     <div class="modal">
@@ -156,7 +97,7 @@
         <div class="prompt-list" id="promptList"></div>
         <div style="display:flex; gap:12px; margin-bottom:12px;">
             <button class="new-prompt-btn" id="newPromptBtn"><i data-lucide="plus"></i> 新建提示词</button>
-            <button class="hub-prompt-btn" id="hubPromptBtn"><i data-lucide="globe"></i> 获取/上传提示词</button>
+            <button class="hub-prompt-btn" id="hubPromptBtn"><i data-lucide="globe"></i> 提示词社区</button>
         </div>
         <div style="text-align:right;margin-top:12px;">
             <button class="btn-primary" style="width:auto;padding:8px 20px;" id="closePromptModalBtn">关闭</button>
@@ -448,8 +389,7 @@
 <!-- 欢迎模态框 -->
 <div class="modal-overlay" id="welcomeModal">
     <div class="modal" style="max-width:560px;text-align:center;">
-        <div style="font-size:48px;margin-bottom:8px;"><i data-lucide="hand" style="width:48px;height:48px;"></i></div>
-        <h2 style="margin-bottom:6px;">欢迎来到 AI Chat</h2>
+        <h2 style="margin-bottom:6px;">欢迎来到 HanaChat</h2>
         <p style="color:#6b7280;font-size:14px;margin-bottom:20px;">一站式智能聊天平台</p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:left;margin-bottom:20px;">
             <div style="background:#f0f4ff;border-radius:10px;padding:12px 14px;">
@@ -495,7 +435,7 @@
 
 <script src="/common.js"></script>
 <script src="/api-paths.js"></script>
-<script th:src="@{/app.js}"></script>
+<script th:src="@{/app.js?v=2}"></script>
 <script>lucide.createIcons();</script>
 </body>
 </html>

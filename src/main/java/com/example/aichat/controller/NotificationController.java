@@ -53,4 +53,28 @@ public class NotificationController {
         notificationService.markAllAsRead(userId);
         return ResponseEntity.ok().build();
     }
+
+    /** 单条标记已读 */
+    @PostMapping("/notifications/{id}/read")
+    public ResponseEntity<?> markAsRead(@PathVariable Long id, Authentication auth) {
+        Long userId = (Long) auth.getPrincipal();
+        try {
+            notificationService.markAsRead(id, userId);
+            return ResponseEntity.ok().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** 删除单条通知 */
+    @DeleteMapping("/notifications/{id}")
+    public ResponseEntity<?> deleteNotification(@PathVariable Long id, Authentication auth) {
+        Long userId = (Long) auth.getPrincipal();
+        try {
+            notificationService.delete(id, userId);
+            return ResponseEntity.ok().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }

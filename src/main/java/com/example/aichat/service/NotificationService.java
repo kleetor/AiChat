@@ -1,5 +1,6 @@
 package com.example.aichat.service;
 
+import com.example.aichat.config.BusinessException;
 import com.example.aichat.model.Notification;
 import com.example.aichat.repository.NotificationRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,7 +20,7 @@ public class NotificationService {
                        Long targetUserId, String type,
                        String title, String content,
                        Long promptId, Long commentId) {
-        if (fromUserId.equals(targetUserId)) return; // 不给自己的操作发通知
+        if (fromUserId != null && fromUserId.equals(targetUserId)) return; // 不给自己的操作发通知
         Notification n = Notification.builder()
                 .targetUserId(targetUserId)
                 .type(type)
@@ -46,5 +47,28 @@ public class NotificationService {
     @Transactional
     public void markAllAsRead(Long userId) {
         notificationRepository.markAllAsRead(userId);
+    }
+
+    /** 单条标记已读 */
+    @Transactional
+    public void markAsRead(Long id, Long userId) {
+        Notification n = notificationRepository.findById(id)
+                .orElseThrow(() -> BusinessException.notFound("通知不存在"));
+        if (!n.getTargetUserId().equals(userId)) {
+            throw BusinessException.forbidden("无权操作");
+        }
+        n.setIsRead(true);
+        notificationRepository.save(n);
+    }
+
+    /** 删除单条通知 */
+    @Transactional
+    public void delete(Long id, Long userId) {
+        Notification n = notificationRepository.findById(id)
+                .orElseThrow(() -> BusinessException.notFound("通知不存在"));
+        if (!n.getTargetUserId().equals(userId)) {
+            throw BusinessException.forbidden("无权操作");
+        }
+        notificationRepository.delete(n);
     }
 }

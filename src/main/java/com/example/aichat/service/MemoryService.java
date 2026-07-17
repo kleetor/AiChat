@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 记忆业务逻辑 — 人类记忆模型的四种操作模式。
@@ -189,6 +190,10 @@ public class MemoryService {
     /**
      * 懒衰减: 在记忆被读取时检查是否该降级/删除。
      * 分摊成本到每次请求，而非凌晨集中批量执行。
+     *
+     * 日期比较 + 简单截断为同步操作（毫秒级）；
+     * LLM 智能压缩改为异步后台执行，不阻塞读取。
+     *
      * @return true 表示该记忆已过期被删除
      */
     private boolean checkAndApplyDecay(MemoryItem item) {
@@ -200,15 +205,16 @@ public class MemoryService {
         if (level == DetailLevel.FULL) {
             LocalDateTime threshold = item.getLastAccessedAt().plusDays(freshDays);
             if (now.isAfter(threshold)) {
-                String compressed = compressIfNeeded(item.getValue(), "将以下信息压缩为200字以内的摘要，保留核心事实：\n");
-                if (compressed != null) {
-                    item.setValue(compressed);
-                    item.setDetailLevel(DetailLevel.BRIEF);
-                    memoryRepo.save(item);
-                    try { chromaService.updateMemory(item.getUserId(), item.getChromaId(), compressed); }
-                    catch (Exception e) { log.warn("ChromaDB 同步压缩失败: id={}", item.getId(), e); }
-                    log.debug("记忆衰减 FULL→BRIEF: id={}", item.getId());
-                }
+                String fallback = truncateText(item.getValue(), 200);
+                String originalValue = item.getValue();
+                item.setValue(fallback);
+                item.setDetailLevel(DetailLevel.BRIEF);
+                memoryRepo.save(item);
+                try { chromaService.updateMemory(item.getUserId(), item.getChromaId(), fallback); }
+                catch (Exception e) { log.warn("ChromaDB 同步压缩失败: id={}", item.getId(), e); }
+                // LLM 智能压缩异步执行，完成后回写
+                compressAsync(item, originalValue, "将以下信息压缩为200字以内的摘要，保留核心事实：\n");
+                log.debug("记忆衰减 FULL→BRIEF: id={}", item.getId());
                 return false;
             }
         }
@@ -216,15 +222,15 @@ public class MemoryService {
         else if (level == DetailLevel.BRIEF) {
             LocalDateTime threshold = item.getLastAccessedAt().plusDays(briefDays);
             if (now.isAfter(threshold)) {
-                String compressed = compressIfNeeded(item.getValue(), "将以下信息压缩为一句话（50字以内），只保留最核心的关键词：\n");
-                if (compressed != null) {
-                    item.setValue(compressed);
-                    item.setDetailLevel(DetailLevel.TITLE);
-                    memoryRepo.save(item);
-                    try { chromaService.updateMemory(item.getUserId(), item.getChromaId(), compressed); }
-                    catch (Exception e) { log.warn("ChromaDB 同步压缩失败: id={}", item.getId(), e); }
-                    log.debug("记忆衰减 BRIEF→TITLE: id={}", item.getId());
-                }
+                String fallback = truncateText(item.getValue(), 50);
+                String originalValue = item.getValue();
+                item.setValue(fallback);
+                item.setDetailLevel(DetailLevel.TITLE);
+                memoryRepo.save(item);
+                try { chromaService.updateMemory(item.getUserId(), item.getChromaId(), fallback); }
+                catch (Exception e) { log.warn("ChromaDB 同步压缩失败: id={}", item.getId(), e); }
+                compressAsync(item, originalValue, "将以下信息压缩为一句话（50字以内），只保留最核心的关键词：\n");
+                log.debug("记忆衰减 BRIEF→TITLE: id={}", item.getId());
                 return false;
             }
         }
@@ -242,20 +248,33 @@ public class MemoryService {
         return false;
     }
 
-    /** 压缩文本 (≤50字直接截断，不做 LLM 调用) */
-    private String compressIfNeeded(String text, String promptPrefix) {
-        if (text.length() <= 50) return text; // 短文本直接复用
-        return compressWithLLM(promptPrefix + text);
+    /** 简单截断文本（毫秒级，不依赖 LLM） */
+    private String truncateText(String text, int maxChars) {
+        if (text == null) return "";
+        if (text.length() <= maxChars) return text;
+        return text.substring(0, maxChars) + "...";
     }
 
-    private String compressWithLLM(String prompt) {
-        try {
-            String result = llmService.chatSync(prompt);
-            return (result != null) ? result.trim() : null;
-        } catch (Exception e) {
-            log.warn("LLM压缩失败", e);
-            return null;
-        }
+    /**
+     * 异步 LLM 压缩：后台调用 LLM 对已截断的记忆进行智能压缩，完成后回写。
+     * 使用 CompletableFuture.runAsync 确保不阻塞当前请求，失败静默忽略。
+     */
+    private void compressAsync(MemoryItem item, String originalValue, String promptPrefix) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                String prompt = promptPrefix + originalValue;
+                String result = llmService.chatSync(prompt);
+                if (result == null || result.trim().isEmpty()) return;
+                result = result.trim();
+                item.setValue(result);
+                memoryRepo.save(item);
+                try { chromaService.updateMemory(item.getUserId(), item.getChromaId(), result); }
+                catch (Exception e) { log.warn("ChromaDB 异步压缩回写失败: id={}", item.getId(), e); }
+                log.debug("LLM 异步压缩完成: id={}", item.getId());
+            } catch (Exception e) {
+                log.warn("LLM 异步压缩失败: id={}", item.getId(), e);
+            }
+        });
     }
 
     // ==================== 手动 CRUD ====================
@@ -319,9 +338,9 @@ public class MemoryService {
 
     @Transactional
     public void deleteAll(Long userId) {
-        chromaService.deleteAll(userId);
-        // MySQL 侧: 删除该用户所有已启用的记忆记录
+        // 先删除 MySQL 记录（事务可回滚），再删 ChromaDB
         memoryRepo.findByUserIdAndEnabledTrue(userId)
                 .forEach(memoryRepo::delete);
+        chromaService.deleteAll(userId);
     }
 }

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>提示词社区 - HanaChat</title>
+    <link rel="icon" href="/HanaChat.png">
+    <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" th:href="@{/workshop.css}">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <!-- ========== 顶部导航栏 ========== -->
+    <nav class="nav-bar">
+        <a href="/" class="nav-brand">
+            <img src="/HanaChat.png" alt="HanaChat" class="nav-logo">
+            <span class="nav-title">提示词社区</span>
+        </a>
+        <!-- 搜索栏 -->
+        <div class="nav-search">
+            <i data-lucide="search" class="search-icon"></i>
+            <input type="text" id="searchInput" placeholder="搜索提示词..." class="search-input">
+        </div>
+        <div class="nav-actions">
+            <span id="userDisplay" class="nav-user"></span>
+            <button id="btnBack" class="btn btn-outline"><i data-lucide="arrow-left"></i> 返回</button>
+            <button id="btnLogout" class="btn btn-ghost"><i data-lucide="log-out"></i> 退出</button>
+        </div>
+    </nav>
+
+    <!-- ========== 主内容区 ========== -->
+    <main class="main-content">
+        <!-- 操作栏 -->
+        <div class="toolbar">
+            <h2 class="toolbar-title">
+                <i data-lucide="sparkles" class="icon-accent"></i>
+                探索提示词
+            </h2>
+            <div class="toolbar-controls">
+                <!-- 排序 -->
+                <select id="sortSelect" class="sort-select">
+                    <option value="likes">热门</option>
+                    <option value="newest">最新</option>
+                    <option value="popular">最多收藏</option>
+                    <option value="rating">最高评分</option>
+                </select>
+                <button id="myPromptsBtn" class="btn btn-outline">
+                    <i data-lucide="user"></i> 我的创作
+                </button>
+                <button id="uploadBtn" class="btn btn-primary">
+                    <i data-lucide="upload"></i> 上传提示词
+                </button>
+            </div>
+        </div>
+
+        <!-- 公告栏 -->
+        <div class="announcement-bar" id="announcementBar">
+            <div class="announcement-content">
+                <div class="announcement-section">
+                    <h4><i data-lucide="info"></i> 上传规范</h4>
+                    <ul>
+                        <li>上传内容须为原创或已获授权，不得搬运他人作品</li>
+                        <li>提示词标题需简洁明了，准确反映提示词用途和效果</li>
+                        <li>请编写正确的分类标签，方便社区成员检索</li>
+                        <li>禁止上传包含违法、色情、暴力、歧视等违规内容</li>
+                        <li>禁止在提示词中植入广告、引流信息或恶意代码</li>
+                        <li>违规提示词将会被下架，多次违规者将被封号</li>
+                        <li>所有提示词上传均会经过人工审核</li>
+                    </ul>
+                </div>
+                <div class="announcement-section">
+                    <h4><i data-lucide="alert-triangle"></i> 图片侵权投诉</h4>
+                    <p>如您认为社区中的提示词配图侵犯了您的合法权益（包括但不限于著作权、肖像权等），请将以下材料发送至投诉邮箱：</p>
+                    <ol>
+                        <li>涉嫌侵权内容的链接或截图</li>
+                        <li>您对该内容享有权利的有效证明</li>
+                        <li>侵权情况的具体说明</li>
+                    </ol>
+                    <p class="announcement-email"><i data-lucide="mail"></i> 投诉邮箱：<a href="mailto:1405921723@qq.com">1405921723@qq.com</a></p>
+                    <p class="announcement-timeline">我们将在收到完整材料后的 <strong>1天之内</strong> 进行答复并下架处理。</p>
+                </div>
+                <div class="announcement-section">
+                    <h4><i data-lucide="message-square"></i> 评论区规范</h4>
+                    <ul>
+                        <li>请使用文明用语，尊重他人表达，禁止人身攻击和辱骂</li>
+                        <li>评论内容需与提示词相关，禁止发布无意义水贴</li>
+                        <li>禁止在评论区发布广告、引流或商业推广信息</li>
+                        <li>禁止发布违法、色情、暴力、歧视等违规内容</li>
+                        <li>违规评论将被删除，情节严重者将封禁账号</li>
+                    </ul>
+                </div>
+            </div>
+            <button class="announcement-toggle" id="announcementToggle" title="收起公告">&times;</button>
+        </div>
+
+        <!-- 加载状态 -->
+        <div class="loading-state" id="loadingState" style="display:none;">
+            <i data-lucide="loader" class="spinner"></i> 加载中...
+        </div>
+
+        <!-- 卡片网格 -->
+        <div class="prompts-grid" id="promptsGrid"></div>
+
+        <!-- 空状态 -->
+        <div class="empty-state" id="emptyState" style="display:none;">
+            <div class="empty-icon"><i data-lucide="inbox"></i></div>
+            <h3>暂无提示词</h3>
+            <p>成为第一个分享者，快来上传你的提示词吧！</p>
+        </div>
+    </main>
+
+    <!-- ========== 上传模态框 ========== -->
+    <div class="modal-overlay" id="uploadModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2><i data-lucide="upload" class="icon-accent"></i> 上传提示词</h2>
+                <button class="close-btn" id="cancelUpload2"><i data-lucide="x"></i></button>
+            </div>
+            <div class="form-group">
+                <label>选择提示词</label>
+                <div class="custom-select" id="promptSelectWrap">
+                    <button type="button" class="custom-select-trigger" id="promptSelectTrigger" onclick="event.stopPropagation();togglePromptDropdown()">
+                        <span class="custom-select-text">请选择你要分享的提示词</span>
+                    </button>
+                    <div class="custom-select-dropdown" id="promptSelectDropdown"></div>
+                    <select id="promptSelect" class="sr-only">
+                        <option value="">请选择你要分享的提示词</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>简短描述 <span class="label-optional">（可选）</span></label>
+                <input type="text" id="uploadDescription" placeholder="一句话介绍你的提示词...">
+            </div>
+            <div class="form-group">
+                <label>留言 <span class="label-optional">（可选）</span></label>
+                <textarea id="userMessage" rows="3" placeholder="分享你对这个提示词的使用心得..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>封面图片 <span class="label-optional">（可选，最大 5MB）</span></label>
+                <input type="file" id="imageInput" accept="image/png,image/jpeg,image/gif,image/webp">
+                <div id="imagePreview" class="image-preview"></div>
+            </div>
+            <div class="form-group">
+                <label>发布方式</label>
+                <div class="publish-toggle">
+                    <label class="publish-option">
+                        <input type="radio" name="publishMode" value="publish" checked>
+                        <span class="publish-option-label">提交审核</span>
+                        <span class="publish-option-desc">审核通过后公开展示</span>
+                    </label>
+                    <label class="publish-option">
+                        <input type="radio" name="publishMode" value="draft">
+                        <span class="publish-option-label">保存草稿</span>
+                        <span class="publish-option-desc">仅自己可见，稍后再发布</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" id="cancelUpload">取消</button>
+                <button class="btn btn-primary" id="submitUpload">确认上传</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 我的创作模态框 ========== -->
+    <div class="modal-overlay" id="myPromptsModal">
+        <div class="modal my-prompts-modal">
+            <div class="modal-header">
+                <h2><i data-lucide="user" class="icon-accent"></i> 我的创作</h2>
+                <button class="close-btn" id="closeMyPrompts"><i data-lucide="x"></i></button>
+            </div>
+            <!-- 筛选栏 -->
+            <div class="my-prompts-toolbar">
+                <div class="my-prompts-search-wrap">
+                    <i data-lucide="search" class="search-icon"></i>
+                    <input type="text" id="myPromptsSearch" class="search-input" placeholder="搜索我的提示词...">
+                </div>
+                <div class="my-prompts-status-tabs" id="myPromptsStatusTabs">
+                    <button class="status-tab active" data-status="">全部</button>
+                    <button class="status-tab" data-status="published">已发布</button>
+                    <button class="status-tab" data-status="draft">草稿</button>
+                    <button class="status-tab" data-status="removed">已下架</button>
+                </div>
+            </div>
+            <!-- 加载状态 -->
+            <div class="loading-state" id="myPromptsLoading" style="display:none;">
+                <i data-lucide="loader" class="spinner"></i> 加载中...
+            </div>
+            <!-- 卡片列表 -->
+            <div class="my-prompts-grid" id="myPromptsGrid"></div>
+            <!-- 空状态 -->
+            <div class="empty-state my-empty-state" id="myPromptsEmpty" style="display:none;">
+                <div class="empty-icon"><i data-lucide="inbox"></i></div>
+                <h3>暂无提示词</h3>
+                <p>你还没有上传过提示词，快去分享吧！</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 详情模态框 ========== -->
+    <div class="modal-overlay" id="detailModal">
+        <div class="modal detail-modal">
+            <div class="modal-header">
+                <h2 id="detailName"></h2>
+                <button class="close-btn" id="closeDetail"><i data-lucide="x"></i></button>
+            </div>
+            <div class="detail-content">
+                <div class="detail-meta">
+                    <span class="meta-item meta-author card-author" id="detailAuthorWrap">
+                        <img id="detailAvatar" class="avatar-mini" src="" alt="">
+                        <span id="detailAuthor"></span>
+                    </span>
+                    <span class="meta-item"><i data-lucide="eye"></i> <span id="detailViews"></span></span>
+                    <span class="meta-item"><i data-lucide="bookmark"></i> <span id="detailSaves"></span></span>
+                    <span class="meta-item"><i data-lucide="heart"></i> <span id="detailLikes"></span></span>
+                    <span class="meta-item" id="detailRatingMeta"><i data-lucide="star"></i> <span id="detailRating"></span></span>
+                    <span class="meta-item"><i data-lucide="calendar"></i> <span id="detailDate"></span></span>
+                </div>
+                <div class="detail-image" id="detailImage"></div>
+                <div class="detail-section">
+                    <h3><i data-lucide="info"></i> 描述</h3>
+                    <p id="detailDesc"></p>
+                </div>
+                <div class="detail-section">
+                    <h3><i data-lucide="file-text"></i> 提示词内容</h3>
+                    <pre id="detailContent"></pre>
+                </div>
+                <div class="detail-section" id="detailMessageSection" style="display:none;">
+                    <h3><i data-lucide="message-circle"></i> 作者留言</h3>
+                    <p id="detailMessage"></p>
+                </div>
+            </div>
+            <div class="detail-actions">
+                <button class="btn btn-outline btn-like" id="likeBtn">
+                    <i data-lucide="heart"></i> 点赞
+                </button>
+                <button class="btn btn-outline" id="saveBtn">
+                    <i data-lucide="bookmark"></i> <span id="saveBtnText">收藏</span>
+                </button>
+                <button class="btn btn-outline" id="downloadBtn">
+                    <i data-lucide="download"></i> 下载到我的提示词
+                </button>
+            </div>
+            <!-- 评分区 -->
+            <div class="rating-section">
+                <span class="rating-label">我的评分：</span>
+                <div class="rating-stars" id="ratingStars">
+                    <span data-rating="1"><i data-lucide="star"></i></span>
+                    <span data-rating="2"><i data-lucide="star"></i></span>
+                    <span data-rating="3"><i data-lucide="star"></i></span>
+                    <span data-rating="4"><i data-lucide="star"></i></span>
+                    <span data-rating="5"><i data-lucide="star"></i></span>
+                </div>
+            </div>
+            <!-- 评论区 -->
+            <div class="comments-section" id="commentsSection">
+                <h3 class="comments-title">
+                    <i data-lucide="message-square"></i> 评论
+                </h3>
+                <div id="commentsList"></div>
+                <div class="comment-input-row" id="commentInputRow">
+                    <textarea id="commentInput" placeholder="发表评论... Ctrl+Enter 发送" rows="1"></textarea>
+                    <button id="commentSubmitBtn" class="btn btn-primary btn-sm">
+                        <i data-lucide="send"></i> 发布
+                    </button>
+                </div>
+                <div class="reply-hint" id="replyHint">
+                    回复中 <a id="cancelReply">取消</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 个人名片模态框 ========== -->
+    <div class="modal-overlay" id="userCardModal">
+        <div class="user-card-box">
+            <div class="user-card-header">
+                <img id="cardAvatar" class="user-card-avatar" src="" alt="">
+                <div class="user-card-info">
+                    <h2 id="cardUsername"></h2>
+                    <span class="user-card-pid">PID: <span id="cardPid"></span></span>
+                </div>
+            </div>
+            <p class="user-card-signature" id="cardSignature"></p>
+            <div class="user-card-stats">
+                <div class="card-stat">
+                    <span class="stat-num" id="cardShareCount">0</span>
+                    <span class="stat-label">分享</span>
+                </div>
+                <div class="card-stat">
+                    <span class="stat-num" id="cardTotalLikes">0</span>
+                    <span class="stat-label">获赞</span>
+                </div>
+            </div>
+            <button id="cardAddFriendBtn" class="btn btn-primary btn-block" style="display:none;">
+                <i data-lucide="user-plus"></i> 申请好友
+            </button>
+            <button id="closeUserCard" class="btn btn-secondary btn-block">关闭</button>
+        </div>
+    </div>
+
+    <script src="/common.js"></script>
+    <script src="/api-paths.js"></script>
+    <script th:src="@{/workshop.js}"></script>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

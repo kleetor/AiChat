@@ -1,0 +1,77 @@
+图像识别请求，示例代码：
+{
+    "model": "gemini-3.1-flash-lite",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a helpful assistant."
+      },
+      {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "这张图片里有什么?请详细描述。若有人物请准确说出人物身份"},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "https://ts1.tc.mm.bing.net/th/id/R-C.92d4a4d1c271c52831a28cb5a2897ca5?rik=%2f9YmVD3fTnwnUA&riu=http%3a%2f%2f2f.zol-img.com.cn%2fproduct%2f81_500x2000%2f451%2fceV9shduJS356.jpg&ehk=UlOGd8UWyZopa%2frit08iQbYFHGxygaoN8yyUUVEE0PM%3d&risl=&pid=ImgRaw&r=0"
+                    }
+                }
+            ]
+        }
+    ]
+  }
+  示例返回
+  {
+    "id": "chatcmpl-20260618004230695039752kme4l4hy",
+    "model": "gemini-3.1-flash-lite",
+    "object": "chat.completion",
+    "created": 1781714554,
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": "这张图片展示了一位日本动漫风格的女性角色，坐在一个昏暗的房间里。以下是详细描述：\n\n### 人物身份\n图中人物是日本知名科幻视觉小说及动画系列**《命运石之门》（Steins;Gate）**中的女主角——**牧濑红莉栖（Makise Kurisu）**。\n\n### 画面细节描述\n*   **人物特征**：她拥有一头标志性的红褐色长直发，眼神冷静且略带忧郁，呈现出一种知性、干练的气质。\n*   **着装风格**：她穿着经典的服装配置，包括白色衬衫、红色领带，以及她标志性的深褐色长袖外套（带黑色的搭扣装饰），下身穿着黑色裤袜。\n*   **动作姿态**：她坐在椅子上，双膝弯曲并紧贴身体，双手环抱双腿，呈现出一种有些防御性或沉思的坐姿。\n*   **环境背景**：\n    *   她坐在一张椅子上，背景是一个典型的书房或实验室环境。\n    *   身后是一个放满书籍和文件的书架，光线较暗，营造出一种专注思考或孤独的氛围。\n    *   画面右侧可以看到桌子的一角，显示出她正处在一个学术或研究性的空间内。\n*   **风格与构图**：整体画风为典型的精细动漫艺术，色彩偏暗，焦点完全集中在人物身上。右下角有“中关村在线”的水印。\n\n牧濑红莉栖在原作中是一位年轻的天才神经科学家，性格傲娇且逻辑严密，这个画面捕捉到了她作为研究者在休息或思考时的一面。"
+            },
+            "finish_reason": "stop"
+        }
+    ],
+    "usage": {
+        "prompt_tokens": 1370,
+        "completion_tokens": 376,
+        "total_tokens": 1746,
+        "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "text_tokens": 0,
+            "audio_tokens": 0,
+            "image_tokens": 0
+        },
+        "completion_tokens_details": {
+            "text_tokens": 0,
+            "audio_tokens": 0,
+            "reasoning_tokens": 0
+        },
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "input_tokens_details": null,
+        "claude_cache_creation_5_m_tokens": 0,
+        "claude_cache_creation_1_h_tokens": 0
+    }
+}
+
+请求url：https://jeniya.cn/v1/chat/completions
+Header
+Authorization: Bearer {sk-HlQ3rOxHrvepsH3kcktUailnvVJQ9KMxrCGl2iSukqp9IDBu}
+Content-Type: application/json
+Accept: application/json
+
+
+上传图片后开始请求图像模型--【插入一个圆弧状进度条】--接收模型返回结果--确认获取到了搜索内容--【进度条跑满消失】--此时，点击发送按钮，将获取到的图像信息以伪装方式并入输入消息中发送给主聊天模型
+模型根据图像模型输出的信息，生成对应的文本描述，返回给用户。
+
+任务：
+1：图像上传接口 
+2：上传后立即请求图像模型识别
+3：接收到返回内容，随时可以点击发送按钮，将返回内容并入输入消息中，发送给主聊天模型
+4：前端对应的页面
+5：注意这里使用的是url图片，不是base64编码的图片，可能要增加转换流程，并限制图片大小。或者直接使用对象存储云服务。

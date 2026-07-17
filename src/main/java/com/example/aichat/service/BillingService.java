@@ -1,5 +1,6 @@
 package com.example.aichat.service;
 
+import com.example.aichat.config.BusinessException;
 import com.example.aichat.model.ModelConfig;
 import com.example.aichat.model.RechargeOrder;
 import com.example.aichat.model.TokenUsage;
@@ -12,7 +13,11 @@ import jakarta.persistence.OptimisticLockException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -20,7 +25,6 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Random;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class BillingService {
@@ -28,13 +32,15 @@ public class BillingService {
     private static final Logger logger = LoggerFactory.getLogger(BillingService.class);
     private static final BigDecimal SAFETY_MULTIPLIER = new BigDecimal("2.0");
 
-    /** 预扣金额映射：userId -> 预估费用，用于 checkAndReserveBalance / deductTokens 之间传递 */
-    private final ConcurrentHashMap<Long, BigDecimal> reservations = new ConcurrentHashMap<>();
-
     private final UserRepository userRepository;
     private final ModelConfigRepository modelConfigRepository;
     private final TokenUsageRepository tokenUsageRepository;
     private final RechargeOrderRepository rechargeOrderRepository;
+
+    // 自注入以支持 REQUIRES_NEW 事务传播（绕过 Spring AOP 自调用限制）
+    @Lazy
+    @Autowired
+    private BillingService self;
 
     @Autowired
     public BillingService(UserRepository userRepository,
@@ -48,23 +54,44 @@ public class BillingService {
     }
 
     @Transactional
+    @CacheEvict(value = "billingBalance", key = "#userId")
     public void checkAndReserveBalance(Long userId, Long modelConfigId, Long estimatedInputTokens) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
+                .orElseThrow(() -> BusinessException.notFound("用户不存在"));
         ModelConfig config = modelConfigRepository.findById(modelConfigId)
-                .orElseThrow(() -> new RuntimeException("模型配置不存在"));
+                .orElseThrow(() -> BusinessException.notFound("模型配置不存在"));
 
         BigDecimal estimatedCost = calculateEstimatedCost(config, estimatedInputTokens);
         
+        // 可用余额 = balance（不含预留）
         if (user.getBalance().compareTo(estimatedCost) < 0) {
             throw new InsufficientBalanceException("余额不足，请充值后再使用");
         }
 
-        // 预扣预估费用，防止并发请求导致余额超支
+        // 从 balance 转入 reserved_balance，均在 DB 中记录
         user.setBalance(user.getBalance().subtract(estimatedCost));
+        user.setReservedBalance(user.getReservedBalance().add(estimatedCost));
         userRepository.save(user);
-        reservations.put(userId, estimatedCost);
-        logger.debug("预扣余额: userId={}, amount={}", userId, estimatedCost);
+        logger.debug("预扣余额(DB): userId={}, amount={}, balance={}, reserved={}", 
+                userId, estimatedCost, user.getBalance(), user.getReservedBalance());
+    }
+
+    /**
+     * 释放用户的预留余额，归还至可用余额。
+     * 用于 LLM 调用成功但后续扣费失败时进行清理。
+     */
+    @Transactional
+    @CacheEvict(value = "billingBalance", key = "#userId")
+    public void releaseReservedBalance(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> BusinessException.notFound("用户不存在"));
+        BigDecimal reserved = user.getReservedBalance();
+        if (reserved.compareTo(BigDecimal.ZERO) > 0) {
+            user.setBalance(user.getBalance().add(reserved));
+            user.setReservedBalance(BigDecimal.ZERO);
+            userRepository.save(user);
+            logger.debug("释放预留余额: userId={}, amount={}, balance={}", userId, reserved, user.getBalance());
+        }
     }
 
     private BigDecimal calculateEstimatedCost(ModelConfig config, Long estimatedInputTokens) {
@@ -81,13 +108,14 @@ public class BillingService {
     }
 
     @Transactional
+    @CacheEvict(value = {"billingBalance", "billingSpent", "billingTokens"}, key = "#userId")
     public TokenUsage deductTokens(Long userId, Long modelConfigId, 
                                    Long inputTokens, Long outputTokens, 
                                    Long conversationId) {
         int retryCount = 3;
         while (retryCount > 0) {
             try {
-                return doDeductTokens(userId, modelConfigId, inputTokens, outputTokens, conversationId);
+                return self.doDeductTokens(userId, modelConfigId, inputTokens, outputTokens, conversationId);
             } catch (OptimisticLockException e) {
                 retryCount--;
                 logger.warn("余额扣减冲突，重试次数: {}", retryCount);
@@ -99,34 +127,41 @@ public class BillingService {
         throw new RuntimeException("扣费失败");
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     protected TokenUsage doDeductTokens(Long userId, Long modelConfigId,
                                          Long inputTokens, Long outputTokens,
                                          Long conversationId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
+                .orElseThrow(() -> BusinessException.notFound("用户不存在"));
         ModelConfig config = modelConfigRepository.findById(modelConfigId)
-                .orElseThrow(() -> new RuntimeException("模型配置不存在"));
-
-        // 退还 checkAndReserveBalance 中预扣的预估费用
-        BigDecimal reservedAmount = reservations.remove(userId);
-        BigDecimal effectiveBalance = reservedAmount != null
-                ? user.getBalance().add(reservedAmount)
-                : user.getBalance();
+                .orElseThrow(() -> BusinessException.notFound("模型配置不存在"));
 
         BigDecimal cost = calculateCost(config, inputTokens, outputTokens);
         
-        if (effectiveBalance.compareTo(cost) < 0) {
-            if (reservedAmount != null) {
-                reservations.put(userId, reservedAmount);
-            }
+        // return reserved_amount to balance first, then deduct actual cost
+        BigDecimal reservedAmount = user.getReservedBalance();
+        BigDecimal usableBalance = user.getBalance().add(reservedAmount);
+        
+        if (usableBalance.compareTo(cost) < 0) {
+            // 归还 reservedBalance 到 balance，避免余额被锁定
+            user.setBalance(user.getBalance().add(reservedAmount));
+            user.setReservedBalance(BigDecimal.ZERO);
+            userRepository.save(user);
+            logger.warn("扣费失败，已归还预留余额: userId={}, reservedAmount={}, balance={}",
+                    userId, reservedAmount, user.getBalance());
             throw new InsufficientBalanceException("余额不足");
         }
 
-        BigDecimal balanceBefore = effectiveBalance.setScale(4, RoundingMode.HALF_UP);
-        BigDecimal balanceAfter = effectiveBalance.subtract(cost).setScale(4, RoundingMode.HALF_UP);
+        BigDecimal balanceBefore = usableBalance.setScale(4, RoundingMode.HALF_UP);
+        BigDecimal balanceAfter = usableBalance.subtract(cost).setScale(4, RoundingMode.HALF_UP);
+        
+        // Update: clear reserved_balance, set balance to after-cost
+        user.setReservedBalance(BigDecimal.ZERO);
         user.setBalance(balanceAfter);
         userRepository.save(user);
+
+        logger.debug("实际扣费: userId={}, cost={}, reserved={}, balanceAfter={}", 
+                userId, cost, reservedAmount, balanceAfter);
 
         TokenUsage usage = TokenUsage.builder()
                 .userId(userId)
@@ -157,9 +192,10 @@ public class BillingService {
     }
 
     @Transactional
+    @CacheEvict(value = "billingBalance", key = "#userId")
     public RechargeOrder recharge(Long userId, BigDecimal amount, String payChannel) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
+                .orElseThrow(() -> BusinessException.notFound("用户不存在"));
 
         String orderNo = generateOrderNo();
         
@@ -188,17 +224,20 @@ public class BillingService {
         return "RC" + timestamp + String.format("%04d", random);
     }
 
+    @Cacheable(value = "billingBalance", key = "#userId")
     public BigDecimal getUserBalance(Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
-        return user.getBalance();
+                .orElseThrow(() -> BusinessException.notFound("用户不存在"));
+        return user.getBalance().add(user.getReservedBalance());
     }
 
+    @Cacheable(value = "billingSpent", key = "#userId")
     public BigDecimal getTotalSpent(Long userId) {
         BigDecimal sum = tokenUsageRepository.sumCostByUserId(userId);
         return sum != null ? sum.setScale(4, RoundingMode.HALF_UP) : BigDecimal.ZERO;
     }
 
+    @Cacheable(value = "billingTokens", key = "#userId")
     public Long getTotalTokens(Long userId) {
         Long sum = tokenUsageRepository.sumTotalTokensByUserId(userId);
         return sum != null ? sum : 0L;
@@ -211,9 +250,10 @@ public class BillingService {
     }
 
     @Transactional
+    @CacheEvict(value = "billingBalance", key = "#userId")
     public RechargeOrder adminRecharge(Long userId, BigDecimal amount, String reason, Long reviewerId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
+                .orElseThrow(() -> BusinessException.notFound("用户不存在"));
 
         String orderNo = generateOrderNo();
 
@@ -243,7 +283,7 @@ public class BillingService {
     @Transactional
     public RechargeOrder createSponsorOrder(Long userId, BigDecimal amount, String sponsorImagePath) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
+                .orElseThrow(() -> BusinessException.notFound("用户不存在"));
 
         String orderNo = "SP" + generateOrderNo().substring(2);
 

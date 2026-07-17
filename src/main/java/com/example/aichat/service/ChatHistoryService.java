@@ -1,6 +1,7 @@
 // service/ChatHistoryService.java（修改后）
 package com.example.aichat.service;
 
+import com.example.aichat.config.BusinessException;
 import com.example.aichat.dto.ChatHistoryResponse;
 import com.example.aichat.model.ChatMessage;
 import com.example.aichat.model.Conversation;
@@ -24,7 +25,7 @@ public class ChatHistoryService {
     // 保存消息（需要传入 conversationId）
     public ChatMessage saveMessage(Long conversationId, String userMessage, String aiReply) {
         Conversation conv = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new RuntimeException("会话不存在"));
+                .orElseThrow(() -> BusinessException.notFound("会话不存在"));
         ChatMessage msg = ChatMessage.builder()
                 .user(conv.getUser())
                 .conversation(conv)
@@ -56,9 +57,9 @@ public class ChatHistoryService {
     // 删除单条消息（需权限校验）
     public void deleteMessage(Long messageId, Long userId) {
         ChatMessage msg = chatMessageRepository.findById(messageId)
-                .orElseThrow(() -> new RuntimeException("消息不存在"));
+                .orElseThrow(() -> BusinessException.notFound("消息不存在"));
         if (!msg.getUser().getId().equals(userId)) {
-            throw new RuntimeException("无权删除此消息");
+            throw BusinessException.forbidden("无权删除此消息");
         }
         chatMessageRepository.delete(msg);
     }

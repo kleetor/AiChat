@@ -1,5 +1,6 @@
 package com.example.aichat.service;
 
+import com.example.aichat.config.BusinessException;
 import com.example.aichat.model.Comment;
 import com.example.aichat.model.User;
 import com.example.aichat.model.UserLike;
@@ -39,7 +40,7 @@ public class CommentService {
     @Transactional
     public Comment addComment(Long promptId, Long userId, String content, Long parentId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
+                .orElseThrow(() -> BusinessException.notFound("用户不存在"));
         Comment comment = Comment.builder()
                 .promptId(promptId)
                 .userId(userId)
@@ -84,6 +85,9 @@ public class CommentService {
         List<Comment> all = commentRepository.findByPromptIdOrderByCreatedAtAsc(promptId);
         if (all.isEmpty()) return Collections.emptyList();
 
+        // 批量加载所有评论者的头像
+        Map<Long, String> avatarMap = loadAvatarMap(all);
+
         // 构建 id -> comment 映射
         Map<Long, Comment> idMap = new LinkedHashMap<>();
         for (Comment c : all) {
@@ -117,10 +121,10 @@ public class CommentService {
         // 构建结果（所有后代一律扁平）
         List<Map<String, Object>> result = new ArrayList<>();
         for (Comment top : topComments) {
-            Map<String, Object> item = toMap(top);
+            Map<String, Object> item = toMap(top, avatarMap);
             item.put("replies",
                     rootToDescendants.get(top.getId()).stream()
-                            .map(this::toMap)
+                            .map(c -> toMap(c, avatarMap))
                             .toList());
             result.add(item);
         }
@@ -144,9 +148,10 @@ public class CommentService {
     /** 获取热门评论（前3条） */
     public List<Map<String, Object>> getHotComments(Long promptId, int limit) {
         List<Comment> hotList = commentRepository.findHotComments(promptId);
+        Map<Long, String> avatarMap = loadAvatarMap(hotList);
         return hotList.stream()
                 .limit(limit)
-                .map(this::toMap)
+                .map(c -> toMap(c, avatarMap))
                 .toList();
     }
 
@@ -154,17 +159,17 @@ public class CommentService {
     @Transactional
     public void likeComment(Long commentId, Long userId) {
         if (!commentRepository.existsById(commentId)) {
-            throw new RuntimeException("评论不存在");
+            throw BusinessException.notFound("评论不存在");
         }
         // 重复点赞
         if (userLikeRepository.existsByUserIdAndTargetTypeAndTargetId(userId, "COMMENT", commentId)) {
-            throw new RuntimeException("已经点过赞了");
+            throw BusinessException.conflict("已经点过赞了");
         }
         // 每日上限
         LocalDateTime todayStart = LocalDate.now().atStartOfDay();
         long todayCount = userLikeRepository.countTodayByUserAndType(userId, "COMMENT", todayStart);
         if (todayCount >= DAILY_LIKE_LIMIT) {
-            throw new RuntimeException("今日评论点赞已达上限（" + DAILY_LIKE_LIMIT + "次）");
+            throw BusinessException.badRequest("今日评论点赞已达上限（" + DAILY_LIKE_LIMIT + "次）");
         }
         commentRepository.incrementLikes(commentId);
         userLikeRepository.save(UserLike.builder()
@@ -197,7 +202,7 @@ public class CommentService {
     @Transactional
     public void deleteComment(Long commentId, Long userId) {
         Comment comment = commentRepository.findById(commentId)
-                .orElseThrow(() -> new RuntimeException("评论不存在"));
+                .orElseThrow(() -> BusinessException.notFound("评论不存在"));
         Long promptId = comment.getPromptId();
 
         // 判断是否为提示词卡片主人
@@ -216,7 +221,7 @@ public class CommentService {
 
         // 非主人只能删自己的评论
         if (!comment.getUserId().equals(userId)) {
-            throw new RuntimeException("你无法删除别人的评论");
+            throw BusinessException.forbidden("你无法删除别人的评论");
         }
 
         // 检查直接子评论中是否有其他用户的评论
@@ -224,7 +229,7 @@ public class CommentService {
         boolean hasOthersReply = children.stream()
                 .anyMatch(child -> !child.getUserId().equals(userId));
         if (hasOthersReply) {
-            throw new RuntimeException("你无法删除别人的评论");
+            throw BusinessException.forbidden("你无法删除别人的评论");
         }
 
         // 子评论全是自己的，递归级联删除
@@ -248,16 +253,22 @@ public class CommentService {
         return commentRepository.countByPromptId(promptId);
     }
 
-    private Map<String, Object> toMap(Comment c) {
+    /** 批量加载评论者的头像 */
+    private Map<Long, String> loadAvatarMap(List<Comment> comments) {
+        Set<Long> userIds = comments.stream()
+                .map(Comment::getUserId)
+                .collect(java.util.stream.Collectors.toSet());
+        return userRepository.findAllById(userIds).stream()
+                .collect(java.util.stream.Collectors.toMap(User::getId, u -> u.getAvatarUrl() != null ? u.getAvatarUrl() : ""));
+    }
+
+    private Map<String, Object> toMap(Comment c, Map<Long, String> avatarMap) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("id", c.getId());
         map.put("promptId", c.getPromptId());
         map.put("userId", c.getUserId());
         map.put("userName", c.getUserName());
-        String avatar = userRepository.findById(c.getUserId())
-                .map(u -> u.getAvatarUrl() != null ? u.getAvatarUrl() : "")
-                .orElse("");
-        map.put("userAvatar", avatar);
+        map.put("userAvatar", avatarMap.getOrDefault(c.getUserId(), ""));
         map.put("content", c.getContent());
         map.put("parentId", c.getParentId());
         map.put("replyToName", c.getReplyToName());

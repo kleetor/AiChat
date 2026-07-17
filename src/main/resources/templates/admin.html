@@ -1,19 +1,32 @@
-<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Chat 管理后台</title>
+    <title>HanaChat 管理后台</title>
     <link rel="stylesheet" href="/theme.css">
     <link rel="stylesheet" href="/admin.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 </head>
 <body>
 
 <!-- ==================== 登录页 ==================== -->
 <div id="loginPage" class="login-page">
+    <div class="floating-icons">
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+    </div>
     <div class="login-box">
-        <h2>AI Chat 管理后台</h2>
-        <p class="subtitle">请使用管理员账号登录</p>
+        <div class="login-brand">
+            <i data-lucide="shield-check" class="login-brand-icon"></i>
+            <h2>HanaChat</h2>
+            <p class="subtitle">管理后台 · 请使用管理员账号登录</p>
+        </div>
         <div id="loginError" class="error-msg"></div>
         <label>用户名</label>
         <input type="text" id="loginUsername" placeholder="请输入管理员用户名" autocomplete="username">
@@ -29,44 +42,73 @@
     <!-- 侧边栏 -->
     <aside class="sidebar">
         <div class="sidebar-header">
-            <span class="logo-icon">AI</span>
-            <span>管理后台</span>
+            <img src="/HanaChat.png" alt="HanaChat" class="sidebar-logo">
+            <div class="sidebar-brand">
+                <span class="sidebar-brand-name">HanaChat</span>
+                <span class="sidebar-brand-sub">管理后台</span>
+            </div>
         </div>
         <nav class="sidebar-nav">
             <a class="active" data-page="dashboard" onclick="switchPage('dashboard', this)">
-                <span class="nav-icon">&#x1F4CA;</span> 仪表盘
+                <i data-lucide="layout-dashboard" class="nav-icon"></i> 仪表盘
             </a>
             <a data-page="users" onclick="switchPage('users', this)">
-                <span class="nav-icon">&#x1F465;</span> 用户管理
+                <i data-lucide="users" class="nav-icon"></i> 用户管理
             </a>
             <a data-page="sponsors" onclick="switchPage('sponsors', this)">
-                <span class="nav-icon">&#x1F4B0;</span> 赞助审核
+                <i data-lucide="hand-coins" class="nav-icon"></i> 赞助审核
+            </a>
+            <a data-page="prompt-audit" onclick="switchPage('prompt-audit', this)">
+                <i data-lucide="clipboard-check" class="nav-icon"></i> 提示词审核
             </a>
             <a data-page="models" onclick="switchPage('models', this)">
-                <span class="nav-icon">&#x1F916;</span> 模型管理
+                <i data-lucide="cpu" class="nav-icon"></i> 模型管理
             </a>
             <a data-page="prompts" onclick="switchPage('prompts', this)">
-                <span class="nav-icon">&#x1F4DD;</span> 社区管理
+                <i data-lucide="messages-square" class="nav-icon"></i> 社区管理
+            </a>
+            <a data-page="rules" onclick="switchPage('rules', this)">
+                <i data-lucide="sliders-horizontal" class="nav-icon"></i> 系统规则
             </a>
             <a data-page="usage" onclick="switchPage('usage', this)">
-                <span class="nav-icon">&#x1F4C8;</span> 消费记录
+                <i data-lucide="trending-up" class="nav-icon"></i> 消费记录
             </a>
             <a data-page="conversations" onclick="switchPage('conversations', this)">
-                <span class="nav-icon">&#x1F4AC;</span> 聊天记录
+                <i data-lucide="message-circle" class="nav-icon"></i> 聊天记录
+            </a>
+            <a data-page="apitest" onclick="switchPage('apitest', this)">
+                <i data-lucide="activity" class="nav-icon"></i> 接口测试
             </a>
         </nav>
         <div class="sidebar-footer">
-            <div class="user-info" id="adminUserInfo">管理员</div>
-            <button class="logout-btn" onclick="doLogout()">退出登录</button>
+            <div class="user-info">
+                <i data-lucide="user" class="user-info-icon"></i>
+                <span id="adminUserInfo">管理员</span>
+            </div>
+            <button class="logout-btn" onclick="doLogout()">
+                <i data-lucide="log-out"></i> 退出登录
+            </button>
         </div>
     </aside>
 
     <!-- 主内容区 -->
     <div class="main-area">
         <div class="topbar">
-            <div class="page-title" id="pageTitle">仪表盘</div>
+            <div class="topbar-left">
+                <button class="menu-toggle" id="menuToggle" title="菜单">
+                    <i data-lucide="menu"></i>
+                </button>
+                <div class="breadcrumb">
+                    <span class="breadcrumb-item">管理后台</span>
+                    <i data-lucide="chevron-right" class="breadcrumb-sep"></i>
+                    <span class="breadcrumb-item active" id="pageTitle">仪表盘</span>
+                </div>
+            </div>
             <div class="topbar-right">
-                <span>欢迎，<strong id="adminName">admin</strong></span>
+                <div class="topbar-admin">
+                    <i data-lucide="shield" class="admin-shield"></i>
+                    <span>欢迎，<strong id="adminName">admin</strong></span>
+                </div>
             </div>
         </div>
 
@@ -103,6 +145,23 @@
                         <div class="stat-card"><div class="stat-label">总消息数</div><div class="stat-value" style="font-size:22px" id="statMessages">-</div></div>
                         <div class="stat-card"><div class="stat-label">今日消息</div><div class="stat-value" style="font-size:22px" id="statTodayMsg">-</div></div>
                     </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>对话趋势</h3>
+                        <div class="time-range-selector">
+                            <button class="btn btn-outline btn-sm time-range-btn active" onclick="loadChartData(7)">7天</button>
+                            <button class="btn btn-outline btn-sm time-range-btn" onclick="loadChartData(15)">15天</button>
+                            <button class="btn btn-outline btn-sm time-range-btn" onclick="loadChartData(30)">30天</button>
+                        </div>
+                    </div>
+                    <div id="conversationChart" class="chart-container"></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header"><h3>模型使用占比</h3></div>
+                    <div id="modelChart" class="chart-container"></div>
                 </div>
             </div>
 
@@ -146,6 +205,27 @@
                 </div>
             </div>
 
+            <!-- ====== 提示词审核 ====== -->
+            <div id="page-prompt-audit" class="page-content" style="display:none">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>提示词审核队列</h3>
+                        <select id="auditStatusFilter" onchange="loadAudit()">
+                            <option value="pending_review">待审核</option>
+                            <option value="published">已通过</option>
+                            <option value="rejected">已驳回</option>
+                        </select>
+                    </div>
+                    <div class="table-wrap"><table>
+                        <thead><tr>
+                            <th>ID</th><th>图片</th><th>名称</th><th>描述</th><th>作者</th><th>提交时间</th><th>状态</th><th>操作</th>
+                        </tr></thead>
+                        <tbody id="auditTableBody"></tbody>
+                    </table></div>
+                    <div class="pagination" id="auditPagination"></div>
+                </div>
+            </div>
+
             <!-- ====== 模型管理 ====== -->
             <div id="page-models" class="page-content" style="display:none">
                 <div class="card">
@@ -155,7 +235,7 @@
                     </div>
                     <div class="table-wrap"><table>
                         <thead><tr>
-                            <th>显示名称</th><th>模型名</th><th>API URL</th><th>API Key</th><th>输入价格</th><th>输出价格</th><th>操作</th>
+                            <th>显示名称</th><th>模型名</th><th>API URL</th><th>输入价格</th><th>输出价格</th><th>操作</th>
                         </tr></thead>
                         <tbody id="modelTableBody"></tbody>
                     </table></div>
@@ -180,6 +260,30 @@
                 </div>
             </div>
 
+            <!-- ====== 系统规则 ====== -->
+            <div id="page-rules" class="page-content" style="display:none">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>系统规则 (SystemRule)</h3>
+                        <button class="btn btn-primary" onclick="openRuleModal()">+ 新增规则</button>
+                    </div>
+                    <p class="hint-text" style="margin-bottom:12px;color:var(--text-muted);font-size:13px">
+                        系统规则会按「排序」顺序自动注入到所有聊天会话的 System Prompt 最前面。
+                        注入顺序：系统规则 → 用户自定义提示词 → 记忆 → 摘要 → 知识库 → 历史 → 当前消息
+                    </p>
+                    <div class="table-wrap"><table>
+                        <thead><tr>
+                            <th style="width:60px">排序</th>
+                            <th>名称</th>
+                            <th style="width:60px">启用</th>
+                            <th>内容</th>
+                            <th style="width:140px">操作</th>
+                        </tr></thead>
+                        <tbody id="ruleTableBody"></tbody>
+                    </table></div>
+                </div>
+            </div>
+
             <!-- ====== 消费记录 ====== -->
             <div id="page-usage" class="page-content" style="display:none">
                 <div class="card">
@@ -200,6 +304,27 @@
                         <tbody id="usageTableBody"></tbody>
                     </table></div>
                     <div class="pagination" id="usagePagination"></div>
+                </div>
+            </div>
+
+            <!-- ====== 接口测试 ====== -->
+            <div id="page-apitest" class="page-content" style="display:none">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>接口健康检测</h3>
+                        <div style="display:flex;gap:12px;align-items:center">
+                            <span id="apiTestSummary" style="font-size:14px;color:var(--text-muted)"></span>
+                            <button class="btn btn-primary" id="apiTestBtn" onclick="runApiTest()">
+                                <i data-lucide="play" style="width:16px;height:16px;margin-right:4px"></i> 一键检测
+                            </button>
+                        </div>
+                    </div>
+                    <div id="apiTestResult" style="display:flex;flex-direction:column;gap:8px">
+                        <div style="text-align:center;color:var(--text-muted);padding:40px">
+                            <i data-lucide="activity" style="width:48px;height:48px;margin-bottom:12px;opacity:0.3"></i>
+                            <p>点击「一键检测」按钮开始检查所有接口运行状态</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -314,7 +439,7 @@
         </div>
         <div class="form-group">
             <label>API Key</label>
-            <input type="text" id="modelApiKey" placeholder="API密钥">
+            <input type="password" id="modelApiKey" placeholder="API密钥" autocomplete="off">
         </div>
         <div class="form-group">
             <label>输入价格 (元/1000 tokens)</label>
@@ -331,6 +456,37 @@
     </div>
 </div>
 
+<!-- 系统规则编辑 -->
+<div id="ruleModal" class="modal-overlay" onclick="closeRuleModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <h3 id="ruleModalTitle">新增规则</h3>
+        <input type="hidden" id="ruleEditId">
+        <div class="form-group">
+            <label>名称</label>
+            <input type="text" id="ruleName" placeholder="如：内容安全策略">
+        </div>
+        <div class="form-group">
+            <label>排序</label>
+            <input type="number" id="ruleSortOrder" value="0" min="0" max="999">
+        </div>
+        <div class="form-group">
+            <label>启用</label>
+            <select id="ruleActive">
+                <option value="true">启用</option>
+                <option value="false">禁用</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>规则内容</label>
+            <textarea id="ruleContent" rows="6" placeholder="输入 System Prompt 规则内容..."></textarea>
+        </div>
+        <div class="modal-btns">
+            <button class="btn btn-outline" onclick="closeRuleModal()">取消</button>
+            <button class="btn btn-primary" onclick="submitRule()">保存</button>
+        </div>
+    </div>
+</div>
+
 <!-- 图片预览 -->
 <div id="imgPreview" class="img-preview-modal" onclick="this.style.display='none'">
     <img id="imgPreviewSrc" src="">
@@ -342,5 +498,6 @@
 <script src="/common.js"></script>
 <script src="/api-paths.js"></script>
 <script src="/admin.js"></script>
+<script>lucide.createIcons();</script>
 </body>
 </html>

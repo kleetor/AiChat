@@ -2,7 +2,6 @@ package com.example.aichat.controller.admin;
 
 import com.example.aichat.model.TokenUsage;
 import com.example.aichat.service.AdminService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -15,8 +14,11 @@ import java.util.Map;
 @RequestMapping("/api/admin")
 public class AdminUsageController {
 
-    @Autowired
-    private AdminService adminService;
+    private final AdminService adminService;
+
+    public AdminUsageController(AdminService adminService) {
+        this.adminService = adminService;
+    }
 
     @GetMapping("/usage-records")
     public ResponseEntity<Page<TokenUsage>> getUsageRecords(

@@ -11,9 +11,17 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.io.File;
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
+
+    private final RateLimitInterceptor rateLimitInterceptor;
+
+    public WebConfig(RateLimitInterceptor rateLimitInterceptor) {
+        this.rateLimitInterceptor = rateLimitInterceptor;
+    }
 
     @Value("${upload.dir:./uploads/images}")
     private String uploadDir;
@@ -21,12 +29,22 @@ public class WebConfig implements WebMvcConfigurer {
     @Value("${upload.url-prefix:/uploads/images}")
     private String uploadUrlPrefix;
 
+    @Value("${cors.allowed-origins:http://localhost:5173,http://localhost:8080}")
+    private String allowedOriginsConfig;
+
     @Override
     public void addCorsMappings(CorsRegistry registry) {
+        List<String> allowedOrigins = parseAllowedOrigins();
         registry.addMapping("/**")
-                .allowedOriginPatterns("*")
+                .allowedOriginPatterns(allowedOrigins.toArray(new String[0]))
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*");
+    }
+
+    @Override
+    public void addInterceptors(org.springframework.web.servlet.config.annotation.InterceptorRegistry registry) {
+        registry.addInterceptor(rateLimitInterceptor)
+                .addPathPatterns("/api/**");
     }
 
     @Override
@@ -51,6 +69,8 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addResourceHandler(pattern)
                 .addResourceLocations("file:" + absolutePath);
 
+        // 随机封面图目录映射
+        addUploadResourceMapping(registry, "uploads/random-covers", "/uploads/random-covers");
         // 赞助相关图片目录映射
         addUploadResourceMapping(registry, "uploads/Storepic", "/uploads/Storepic");
         addUploadResourceMapping(registry, "uploads/upStorepic", "/uploads/upStorepic");
@@ -75,12 +95,20 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+        List<String> allowedOrigins = parseAllowedOrigins();
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(java.util.List.of("*"));
+        configuration.setAllowedOriginPatterns(allowedOrigins);
         configuration.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(java.util.List.of("*"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
+    }
+
+    private List<String> parseAllowedOrigins() {
+        return Arrays.stream(allowedOriginsConfig.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
     }
 }

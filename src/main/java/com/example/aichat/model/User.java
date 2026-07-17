@@ -27,6 +27,7 @@ public class User {
     private String email;
 
     @Column(nullable = false)
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.WRITE_ONLY)
     private String password;
 
     @Column(nullable = false, unique = true, length = 6)
@@ -35,6 +36,10 @@ public class User {
     @Column(nullable = false, precision = 12, scale = 4)
     @Builder.Default
     private BigDecimal balance = BigDecimal.ZERO;
+
+    @Column(name = "reserved_balance", nullable = false, precision = 12, scale = 4)
+    @Builder.Default
+    private BigDecimal reservedBalance = BigDecimal.ZERO;
 
     @Column(nullable = false, length = 20)
     @Builder.Default

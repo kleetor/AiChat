@@ -4,6 +4,7 @@ import com.example.aichat.dto.KnowledgeBaseRequest;
 import com.example.aichat.model.KbDocument;
 import com.example.aichat.model.KnowledgeBase;
 import com.example.aichat.service.KnowledgeBaseService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -23,7 +24,7 @@ public class KnowledgeBaseController {
 
     /** 创建知识库 */
     @PostMapping("/create")
-    public ResponseEntity<?> create(@RequestBody KnowledgeBaseRequest req,
+    public ResponseEntity<?> create(@Valid @RequestBody KnowledgeBaseRequest req,
                                      Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
         KnowledgeBase kb = kbService.create(req.getName(), req.getDescription(), userId);
@@ -40,7 +41,7 @@ public class KnowledgeBaseController {
     /** 编辑知识库 */
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id,
-                                     @RequestBody KnowledgeBaseRequest req,
+                                     @Valid @RequestBody KnowledgeBaseRequest req,
                                      Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
         KnowledgeBase kb = kbService.update(id, userId, req.getName(), req.getDescription());

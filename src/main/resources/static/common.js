@@ -6,30 +6,30 @@
 ; (function (global) {
   'use strict';
 
-  // ======== 认证管理 ========
+  // ======== 认证管理 (使用 sessionStorage 与 React SPA 保持一致) ========
   const Auth = {
     TOKEN_KEY: 'chat_token',
     USERNAME_KEY: 'chat_username',
 
     getToken: function () {
-      return localStorage.getItem(this.TOKEN_KEY) || '';
+      return sessionStorage.getItem(this.TOKEN_KEY) || '';
     },
 
     setToken: function (token) {
-      localStorage.setItem(this.TOKEN_KEY, token);
+      sessionStorage.setItem(this.TOKEN_KEY, token);
     },
 
     getUsername: function () {
-      return localStorage.getItem(this.USERNAME_KEY) || '';
+      return sessionStorage.getItem(this.USERNAME_KEY) || '';
     },
 
     setUsername: function (name) {
-      localStorage.setItem(this.USERNAME_KEY, name);
+      sessionStorage.setItem(this.USERNAME_KEY, name);
     },
 
     clear: function () {
-      localStorage.removeItem(this.TOKEN_KEY);
-      localStorage.removeItem(this.USERNAME_KEY);
+      sessionStorage.removeItem(this.TOKEN_KEY);
+      sessionStorage.removeItem(this.USERNAME_KEY);
     },
 
     isLoggedIn: function () {
@@ -54,7 +54,7 @@
 
     return function (url, opts) {
       opts = opts || {};
-      var token = localStorage.getItem(tokenKey) || '';
+      var token = sessionStorage.getItem(tokenKey) || '';
       var headers = {};
       // 复制自定义 headers
       if (opts.headers) {
@@ -79,6 +79,7 @@
         body: body
       }).then(function (res) {
         if (res.status === 401) {
+          sessionStorage.removeItem(tokenKey);
           window.location.href = redirectOn401;
           return null;
         }

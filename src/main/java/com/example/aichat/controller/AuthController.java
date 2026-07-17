@@ -1,13 +1,12 @@
 package com.example.aichat.controller;
 
-import com.example.aichat.dto.AuthResponse;
-import com.example.aichat.dto.LoginRequest;
-import com.example.aichat.dto.RegisterRequest;
+import com.example.aichat.dto.*;
 import com.example.aichat.model.User;
 import com.example.aichat.repository.FriendshipRepository;
 import com.example.aichat.repository.PromptsHubRepository;
 import com.example.aichat.service.EmailService;
 import com.example.aichat.service.UserService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -18,7 +17,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -41,44 +42,28 @@ public class AuthController {
     private FriendshipRepository friendshipRepository;
 
     @PostMapping("/send-code")
-    public ResponseEntity<Map<String, Object>> sendCode(@RequestBody Map<String, String> request) {
-        String email = request.get("email");
-        if (email == null || email.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "邮箱不能为空"));
-        }
-        try {
-            emailService.sendVerificationCode(email);
-            return ResponseEntity.ok(Map.of("success", true));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
-        }
+    public ResponseEntity<Map<String, Object>> sendCode(@Valid @RequestBody SendCodeRequest request) {
+        emailService.sendVerificationCode(request.getEmail());
+        return ResponseEntity.ok(Map.of("success", true));
     }
 
     @PostMapping("/register")
-    public ResponseEntity<Map<String, Object>> register(@RequestBody RegisterRequest request) {
-        try {
-            AuthResponse response = userService.register(request);
-            return ResponseEntity.ok(Map.of(
-                    "token", response.getToken(),
-                    "username", response.getUsername(),
-                    "balance", response.getBalance()
-            ));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
-        }
+    public ResponseEntity<Map<String, Object>> register(@Valid @RequestBody RegisterRequest request) {
+        AuthResponse response = userService.register(request);
+        return ResponseEntity.ok(Map.of(
+                "token", response.getToken(),
+                "username", response.getUsername(),
+                "balance", response.getBalance()
+        ));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<Map<String, Object>> login(@RequestBody LoginRequest request) {
-        try {
-            AuthResponse response = userService.login(request);
-            return ResponseEntity.ok(Map.of(
-                    "token", response.getToken(),
-                    "username", response.getUsername()
-            ));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
-        }
+    public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody LoginRequest request) {
+        AuthResponse response = userService.login(request);
+        return ResponseEntity.ok(Map.of(
+                "token", response.getToken(),
+                "username", response.getUsername()
+        ));
     }
 
     @GetMapping("/me")
@@ -132,10 +117,10 @@ public class AuthController {
     }
 
     @PostMapping("/update-profile")
-    public ResponseEntity<?> updateProfile(@RequestBody Map<String, String> request,
+    public ResponseEntity<?> updateProfile(@RequestBody UpdateProfileRequest request,
                                            Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        String signature = request.get("signature");
+        String signature = request.getSignature();
         if (signature != null && signature.length() > 200) {
             return ResponseEntity.badRequest().body(Map.of("message", "签名长度不能超过200个字符"));
         }
@@ -166,7 +151,12 @@ public class AuthController {
             String ext = ".png";
             String originalName = file.getOriginalFilename();
             if (originalName != null && originalName.contains(".")) {
-                ext = originalName.substring(originalName.lastIndexOf("."));
+                ext = originalName.substring(originalName.lastIndexOf(".")).toLowerCase();
+                // 白名单：仅允许常见图片扩展名
+                Set<String> allowed = new HashSet<>(java.util.Arrays.asList(".png", ".jpg", ".jpeg", ".gif", ".webp"));
+                if (!allowed.contains(ext)) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "不支持的图片格式，仅允许: png, jpg, jpeg, gif, webp"));
+                }
             }
             String fileName = "avatar_" + userId + "_" + UUID.randomUUID().toString().substring(0, 8) + ext;
             File target = new File(dirFile, fileName);
@@ -180,52 +170,27 @@ public class AuthController {
     }
 
     @PostMapping("/change-password")
-    public ResponseEntity<?> changePassword(@RequestBody Map<String, String> request,
+    public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordRequest request,
                                            Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        String currentPassword = request.get("currentPassword");
-        String newPassword = request.get("newPassword");
-        try {
-            userService.changePassword(userId, currentPassword, newPassword);
-            return ResponseEntity.ok().build();
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+        userService.changePassword(userId, request.getCurrentPassword(), request.getNewPassword());
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/verify-password")
-    public ResponseEntity<?> verifyPassword(@RequestBody Map<String, String> request,
+    public ResponseEntity<?> verifyPassword(@Valid @RequestBody VerifyPasswordRequest request,
                                            Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        String password = request.get("password");
-        try {
-            userService.verifyPassword(userId, password);
-            return ResponseEntity.ok().build();
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+        userService.verifyPassword(userId, request.getPassword());
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/send-reset-code")
-    public ResponseEntity<Map<String, Object>> sendResetCode(@RequestBody Map<String, String> request) {
-        String usernameOrEmail = request.get("username");
-        if (usernameOrEmail == null || usernameOrEmail.isEmpty()) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "请输入用户名或邮箱");
-            return ResponseEntity.badRequest().body(response);
-        }
-        try {
-            userService.sendResetCode(usernameOrEmail);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
+    public ResponseEntity<Map<String, Object>> sendResetCode(@Valid @RequestBody SendResetCodeRequest request) {
+        userService.sendResetCode(request.getUsername());
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/reset-password")
@@ -233,22 +198,15 @@ public class AuthController {
         String usernameOrEmail = request.get("username");
         String code = request.get("code");
         String newPassword = request.get("newPassword");
-        if (newPassword == null || newPassword.length() < 6) {
+        if (newPassword == null || !newPassword.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}$")) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "新密码长度至少6位");
+            response.put("message", "密码至少8位，需包含大写字母、小写字母和数字");
             return ResponseEntity.badRequest().body(response);
         }
-        try {
-            userService.resetPassword(usernameOrEmail, code, newPassword);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        }
+        userService.resetPassword(usernameOrEmail, code, newPassword);
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        return ResponseEntity.ok(response);
     }
 }

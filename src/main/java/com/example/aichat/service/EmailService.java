@@ -1,5 +1,6 @@
 package com.example.aichat.service;
 
+import com.example.aichat.config.BusinessException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,8 +11,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class EmailService {
@@ -26,7 +27,6 @@ public class EmailService {
 
     private final Map<String, EmailCode> codeMap = new ConcurrentHashMap<>();
     private final Map<String, EmailCode> resetCodeMap = new ConcurrentHashMap<>();
-    private final Random random = new Random();
 
     private static class EmailCode {
         String code;
@@ -46,11 +46,11 @@ public class EmailService {
         if (codeMap.containsKey(email)) {
             EmailCode existing = codeMap.get(email);
             if (System.currentTimeMillis() - existing.createTime < 60000) {
-                throw new RuntimeException("请稍后再试，验证码已发送");
+                throw BusinessException.badRequest("请稍后再试，验证码已发送");
             }
         }
 
-        String code = String.format("%06d", random.nextInt(1000000));
+        String code = String.format("%06d", ThreadLocalRandom.current().nextInt(1000000));
 
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(fromEmail);
@@ -71,25 +71,25 @@ public class EmailService {
     public void verifyCode(String email, String code) {
         EmailCode emailCode = codeMap.get(email);
         if (emailCode == null) {
-            throw new RuntimeException("验证码不存在或已过期");
+            throw BusinessException.badRequest("验证码不存在或已过期");
         }
 
         if (emailCode.used) {
-            throw new RuntimeException("验证码已被使用");
+            throw BusinessException.badRequest("验证码已被使用");
         }
 
         if (System.currentTimeMillis() - emailCode.createTime > 300000) {
             codeMap.remove(email);
-            throw new RuntimeException("验证码已过期");
+            throw BusinessException.badRequest("验证码已过期");
         }
 
         if (!emailCode.code.equals(code)) {
             emailCode.verifyCount++;
             if (emailCode.verifyCount >= 5) {
                 codeMap.remove(email);
-                throw new RuntimeException("验证码错误次数过多，请重新获取");
+                throw BusinessException.badRequest("验证码错误次数过多，请重新获取");
             }
-            throw new RuntimeException("验证码错误");
+            throw BusinessException.badRequest("验证码错误");
         }
 
         emailCode.used = true;
@@ -99,11 +99,11 @@ public class EmailService {
         if (resetCodeMap.containsKey(email)) {
             EmailCode existing = resetCodeMap.get(email);
             if (System.currentTimeMillis() - existing.createTime < 60000) {
-                throw new RuntimeException("请稍后再试，验证码已发送");
+                throw BusinessException.badRequest("请稍后再试，验证码已发送");
             }
         }
 
-        String code = String.format("%06d", random.nextInt(1000000));
+        String code = String.format("%06d", ThreadLocalRandom.current().nextInt(1000000));
 
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(fromEmail);
@@ -124,25 +124,25 @@ public class EmailService {
     public void verifyResetCode(String email, String code) {
         EmailCode emailCode = resetCodeMap.get(email);
         if (emailCode == null) {
-            throw new RuntimeException("验证码不存在或已过期");
+            throw BusinessException.badRequest("验证码不存在或已过期");
         }
 
         if (emailCode.used) {
-            throw new RuntimeException("验证码已被使用");
+            throw BusinessException.badRequest("验证码已被使用");
         }
 
         if (System.currentTimeMillis() - emailCode.createTime > 300000) {
             resetCodeMap.remove(email);
-            throw new RuntimeException("验证码已过期");
+            throw BusinessException.badRequest("验证码已过期");
         }
 
         if (!emailCode.code.equals(code)) {
             emailCode.verifyCount++;
             if (emailCode.verifyCount >= 5) {
                 resetCodeMap.remove(email);
-                throw new RuntimeException("验证码错误次数过多，请重新获取");
+                throw BusinessException.badRequest("验证码错误次数过多，请重新获取");
             }
-            throw new RuntimeException("验证码错误");
+            throw BusinessException.badRequest("验证码错误");
         }
 
         emailCode.used = true;

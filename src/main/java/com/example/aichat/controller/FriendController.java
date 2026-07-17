@@ -1,13 +1,14 @@
 package com.example.aichat.controller;
 
+import com.example.aichat.dto.FriendRequestDTO;
 import com.example.aichat.model.FriendMessage;
 import com.example.aichat.service.FriendService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -26,41 +27,26 @@ public class FriendController {
 
     /** 发送好友申请 */
     @PostMapping("/request")
-    public ResponseEntity<?> sendRequest(@RequestBody Map<String, Object> body, Authentication auth) {
+    public ResponseEntity<?> sendRequest(@RequestBody FriendRequestDTO body, Authentication auth) {
         Long fromUserId = (Long) auth.getPrincipal();
-        Long toUserId = Long.valueOf(body.get("userId").toString());
-        try {
-            friendService.sendFriendRequest(fromUserId, toUserId);
-            return ResponseEntity.ok(Map.of("message", "申请已发送"));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
+        friendService.sendFriendRequest(fromUserId, body.getUserId());
+        return ResponseEntity.ok(Map.of("message", "申请已发送"));
     }
 
     /** 接受好友申请 */
     @PostMapping("/accept")
-    public ResponseEntity<?> acceptRequest(@RequestBody Map<String, Object> body, Authentication auth) {
+    public ResponseEntity<?> acceptRequest(@RequestBody FriendRequestDTO body, Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
-        Long friendshipId = Long.valueOf(body.get("friendshipId").toString());
-        try {
-            friendService.acceptRequest(friendshipId, userId);
-            return ResponseEntity.ok(Map.of("message", "已接受"));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
+        friendService.acceptRequest(body.getFriendshipId(), userId);
+        return ResponseEntity.ok(Map.of("message", "已接受"));
     }
 
     /** 拒绝好友申请 */
     @PostMapping("/reject")
-    public ResponseEntity<?> rejectRequest(@RequestBody Map<String, Object> body, Authentication auth) {
+    public ResponseEntity<?> rejectRequest(@RequestBody FriendRequestDTO body, Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
-        Long friendshipId = Long.valueOf(body.get("friendshipId").toString());
-        try {
-            friendService.rejectRequest(friendshipId, userId);
-            return ResponseEntity.ok(Map.of("message", "已拒绝"));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
+        friendService.rejectRequest(body.getFriendshipId(), userId);
+        return ResponseEntity.ok(Map.of("message", "已拒绝"));
     }
 
     /** 好友列表 */
@@ -79,22 +65,18 @@ public class FriendController {
 
     /** 发送消息 */
     @PostMapping("/message")
-    public ResponseEntity<?> sendMessage(@RequestBody Map<String, Object> body, Authentication auth) {
+    public ResponseEntity<?> sendMessage(@RequestBody FriendRequestDTO body, Authentication auth) {
         Long senderId = (Long) auth.getPrincipal();
-        Long friendshipId = Long.valueOf(body.get("friendshipId").toString());
-        String content = body.get("content").toString();
-        if (content.isBlank()) return ResponseEntity.badRequest().build();
-        try {
-            FriendMessage msg = friendService.sendMessage(senderId, friendshipId, content);
-            return ResponseEntity.ok(Map.of(
-                    "id", msg.getId(),
-                    "senderId", msg.getSenderId(),
-                    "content", msg.getContent(),
-                    "createdAt", msg.getCreatedAt()
-            ));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        if (body.getContent() == null || body.getContent().isBlank()) {
+            return ResponseEntity.badRequest().build();
         }
+        FriendMessage msg = friendService.sendMessage(senderId, body.getFriendshipId(), body.getContent());
+        return ResponseEntity.ok(Map.of(
+                "id", msg.getId(),
+                "senderId", msg.getSenderId(),
+                "content", msg.getContent(),
+                "createdAt", msg.getCreatedAt()
+        ));
     }
 
     /** 获取与某好友的聊天记录 */

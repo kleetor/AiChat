@@ -1,6 +1,7 @@
 // service/ConversationService.java
 package com.example.aichat.service;
 
+import com.example.aichat.config.BusinessException;
 import com.example.aichat.model.Conversation;
 import com.example.aichat.model.User;
 import com.example.aichat.repository.ConversationRepository;
@@ -23,13 +24,14 @@ public class ConversationService {
     private static final int MAX_CONVERSATIONS = 10;
 
     // 创建新会话（自动设置创建时间和用户）
+    @Transactional
     public Conversation createConversation(Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
+                .orElseThrow(() -> BusinessException.notFound("用户不存在"));
         
-        long count = conversationRepository.countByUserId(userId);
+        long count = conversationRepository.countByUserIdForUpdate(userId);
         if (count >= MAX_CONVERSATIONS) {
-            throw new RuntimeException("对话数量已达上限（最多10条）");
+            throw BusinessException.badRequest("对话数量已达上限（最多10条）");
         }
         
         Conversation conv = Conversation.builder()

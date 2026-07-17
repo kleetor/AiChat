@@ -22,50 +22,41 @@ public final class AESUtil {
     private static final String CIPHER_ALGORITHM = "AES/GCM/NoPadding";
     private static final int GCM_IV_LENGTH = 12;   // 96 bits, NIST recommended
     private static final int GCM_TAG_LENGTH = 128;  // bits
-    private static final String DEFAULT_KEY = "aichat-dev-key-!";
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static SecretKeySpec KEY_SPEC;
-
-    static {
-        reloadKey(readKeyFromEnv());
-    }
+    private static boolean initialized = false;
 
     private AESUtil() {}
 
     /** Spring 配置类启动后调用，使用 application.properties / .env 中的密钥覆盖 */
     public static synchronized void setKey(String key) {
+        if (key == null || key.isEmpty()) {
+            throw new IllegalStateException("ENCRYPTION_KEY 未配置，请设置环境变量 ENCRYPTION_KEY（必须为 16 位字符）");
+        }
         reloadKey(key);
+        initialized = true;
     }
 
     public static String getKeySource() {
+        if (!initialized) return "not-initialized";
         String k = System.getProperty("ENCRYPTION_KEY");
         if (k != null && !k.isEmpty()) return "system-property";
         k = System.getenv("ENCRYPTION_KEY");
         if (k != null && !k.isEmpty()) return "environment";
-        return (KEY_SPEC != null && !matchesDefault()) ? "spring-config" : "default";
+        return "spring-config";
     }
 
-    private static boolean matchesDefault() {
-        return KEY_SPEC != null && java.util.Arrays.equals(
-                KEY_SPEC.getEncoded(),
-                new SecretKeySpec(DEFAULT_KEY.getBytes(StandardCharsets.UTF_8), ALGORITHM).getEncoded());
-    }
-
-    private static String readKeyFromEnv() {
-        String key = System.getProperty("ENCRYPTION_KEY");
-        if (key == null || key.isEmpty()) {
-            key = System.getenv("ENCRYPTION_KEY");
+    /**
+     * 在加密/解密前检查密钥是否已初始化，未初始化则抛出明确错误，
+     * 防止因配置遗漏导致使用弱密钥。
+     */
+    private static void ensureInitialized() {
+        if (!initialized) {
+            throw new IllegalStateException("AES 密钥未初始化，请设置 ENCRYPTION_KEY 环境变量");
         }
-        if (key == null || key.isEmpty()) {
-            key = DEFAULT_KEY;
-        }
-        return key;
     }
 
     private static void reloadKey(String key) {
-        if (key == null || key.isEmpty()) {
-            key = DEFAULT_KEY;
-        }
         byte[] keyBytes = key.getBytes(StandardCharsets.UTF_8);
         if (keyBytes.length != 16) {
             byte[] padded = new byte[16];
@@ -76,6 +67,7 @@ public final class AESUtil {
     }
 
     public static String encrypt(String plainText) {
+        ensureInitialized();
         if (plainText == null) return null;
         try {
             byte[] iv = new byte[GCM_IV_LENGTH];
@@ -99,23 +91,15 @@ public final class AESUtil {
 
     /** 解密失败时不抛异常，返回 null 让调用方降级处理 */
     public static String decrypt(String encryptedText) {
+        ensureInitialized();
         if (encryptedText == null) return null;
         byte[] decoded = Base64.getDecoder().decode(encryptedText);
 
-        // 1. Try GCM first (new format: IV(12) + ciphertext)
+        // 仅支持 GCM 解密 (IV(12) + ciphertext)
         try {
             return decryptGCM(decoded);
         } catch (Exception e) {
-            logger.debug("GCM 解密失败，尝试 ECB 解密（兼容旧数据）: {}", e.getMessage());
-        }
-
-        // 2. Fallback: ECB (old data, no IV prefix)
-        try {
-            Cipher cipher = Cipher.getInstance(ALGORITHM);
-            cipher.init(Cipher.DECRYPT_MODE, KEY_SPEC);
-            return new String(cipher.doFinal(decoded), StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            logger.warn("AES 解密失败（密钥可能不匹配，将交由迁移程序重新加密）: {}", e.getMessage());
+            logger.warn("AES GCM 解密失败（密钥可能不匹配）: {}", e.getMessage());
             return null;
         }
     }

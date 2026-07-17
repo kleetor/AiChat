@@ -1,16 +1,46 @@
+# Maven 构建输出（仅保留最终 JAR）
 target/*
-!target/*.jar
-*.iml
+!target/*-SNAPSHOT.jar
+
+# IDE
 .idea/
 .vscode/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+.factorypath
+
+# Git
 .git/
 .gitignore
+.gitattributes
+
+# 文档 & 计划
 **/*.md
-.env*
-node_modules/
-logs/
-chroma_data/
+*.txt
 Plans.1.0/
 Plans.2.0/
 SQL/
+
+# 环境变量（敏感信息）
+.env*
+!.env.example
+
+# 运行时数据
+chroma_data/
+logs/
 uploads/
+node_modules/
+
+# 测试
+src/test/
+
+# Maven Wrapper JAR（仅需 properties 文件）
+.mvn/wrapper/maven-wrapper.jar
+
+# OS
+.DS_Store
+Thumbs.db

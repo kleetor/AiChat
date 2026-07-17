@@ -9,6 +9,7 @@ import com.example.aichat.service.ChatHistoryService;
 import com.example.aichat.service.ChatService;
 import com.example.aichat.service.LLMService;
 import com.example.aichat.service.ConversationService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -39,7 +40,7 @@ public class ChatController {
     // 聊天：接收消息和会话ID（必须）
     @PostMapping("/chat/{conversationId}")
     public ResponseEntity<?> chat(@PathVariable Long conversationId,
-                                  @RequestBody ChatRequest request,
+                                  @Valid @RequestBody ChatRequest request,
                                   Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         if (!conversationService.belongsToUser(conversationId, userId)) {
@@ -71,7 +72,7 @@ public class ChatController {
     // 流式聊天（SSE）
     @PostMapping(value = "/chat/{conversationId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public ResponseEntity<?> chatStream(@PathVariable Long conversationId,
-                                        @RequestBody ChatRequest request,
+                                        @Valid @RequestBody ChatRequest request,
                                         Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         if (!conversationService.belongsToUser(conversationId, userId)) {

@@ -1,0 +1,156 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500&family=Geist+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-size: 15px;
+    --font-weight-medium: 500;
+    --font-weight-normal: 400;
+    --background: 350 30% 98%;
+    --foreground: 350 10% 16%;
+    --card: 0 0% 100%;
+    --card-foreground: 350 10% 16%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 350 10% 16%;
+    --primary: 350 48% 67%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 350 25% 96%;
+    --secondary-foreground: 350 10% 16%;
+    --muted: 350 20% 95%;
+    --muted-foreground: 350 10% 50%;
+    --accent: 350 30% 95%;
+    --accent-foreground: 350 10% 16%;
+    --destructive: 0 65% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 350 15% 90%;
+    --input: 350 10% 97%;
+    --input-background: #fef9fa;
+    --switch-background: #e8d4d8;
+    --ring: 350 48% 67%;
+    --chart-1: 350 48% 67%;
+    --chart-2: 340 40% 55%;
+    --chart-3: 10 50% 58%;
+    --chart-4: 30 45% 62%;
+    --chart-5: 320 35% 55%;
+    --radius: 0.5rem;
+    --sidebar: 350 25% 98%;
+    --sidebar-foreground: 350 10% 16%;
+    --sidebar-primary: 350 48% 67%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 350 20% 95%;
+    --sidebar-accent-foreground: 350 10% 16%;
+    --sidebar-border: 350 15% 92%;
+    --sidebar-ring: 350 48% 67%;
+  }
+
+  .dark {
+    --font-size: 15px;
+    --font-weight-medium: 500;
+    --font-weight-normal: 400;
+    --background: 350 15% 7%;
+    --foreground: 350 10% 90%;
+    --card: 350 12% 10%;
+    --card-foreground: 350 10% 90%;
+    --popover: 350 12% 10%;
+    --popover-foreground: 350 10% 90%;
+    --primary: 350 55% 72%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 350 12% 14%;
+    --secondary-foreground: 350 10% 90%;
+    --muted: 350 10% 16%;
+    --muted-foreground: 350 8% 60%;
+    --accent: 350 12% 16%;
+    --accent-foreground: 350 10% 90%;
+    --destructive: 0 65% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 350 8% 22%;
+    --input: 350 8% 12%;
+    --input-background: #221a1c;
+    --switch-background: #3d2f32;
+    --ring: 350 55% 72%;
+    --chart-1: 350 55% 72%;
+    --chart-2: 340 45% 60%;
+    --chart-3: 15 55% 62%;
+    --chart-4: 35 50% 65%;
+    --chart-5: 325 40% 58%;
+    --radius: 0.5rem;
+    --sidebar: 350 15% 7%;
+    --sidebar-foreground: 350 10% 90%;
+    --sidebar-primary: 350 55% 72%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 350 12% 10%;
+    --sidebar-accent-foreground: 350 15% 82%;
+    --sidebar-border: 350 8% 22%;
+    --sidebar-ring: 350 55% 72%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', 'Noto Sans SC', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  h1 {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h2 {
+    font-size: var(--text-xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h3 {
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h4 {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  label {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  button {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  input {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+  }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-in {
+  animation: toast-in 0.3s ease-out;
+}

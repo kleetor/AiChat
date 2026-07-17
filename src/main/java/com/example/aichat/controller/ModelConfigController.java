@@ -4,6 +4,7 @@ import com.example.aichat.dto.ModelConfigResponse;
 import com.example.aichat.model.ModelConfig;
 import com.example.aichat.repository.ModelConfigRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,6 +19,7 @@ public class ModelConfigController {
     private ModelConfigRepository modelConfigRepository;
 
     @GetMapping
+    @Cacheable(value = "modelConfigs", key = "'publicAll'")
     public ResponseEntity<List<ModelConfigResponse>> getAllConfigs() {
         List<ModelConfigResponse> configs = modelConfigRepository.findAll().stream()
                 .map(this::convertToResponse)
@@ -26,6 +28,7 @@ public class ModelConfigController {
     }
 
     @GetMapping("/{id}")
+    @Cacheable(value = "modelConfigs", key = "#id")
     public ResponseEntity<ModelConfigResponse> getConfigById(@PathVariable Long id) {
         return modelConfigRepository.findById(id)
                 .map(this::convertToResponse)

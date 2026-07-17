@@ -1551,6 +1551,7 @@ body {
    消息通知
    ========================================== */
 .msg-notif {
+  position: relative;
   padding: 12px 14px;
   border-radius: 12px;
   margin-bottom: 6px;
@@ -1569,6 +1570,29 @@ body {
 .msg-notif .notif-title { font-size: 13px; font-weight: 600; color: #3a3f47; margin-bottom: 2px; }
 .msg-notif .notif-content { font-size: 12px; color: #7a8599; }
 .msg-notif .notif-time { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+.msg-notif-delete {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.06);
+  color: #999;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 0;
+}
+.msg-notif-delete:hover {
+  background: rgba(239,68,68,0.15);
+  color: #ef4444;
+}
 .msg-empty { text-align: center; color: #9ca3af; font-size: 13px; padding: 24px 0; }
 .msg-badge {
   display: inline-block;

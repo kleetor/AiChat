@@ -1,6 +1,6 @@
 const API = '';
-let token = localStorage.getItem('chat_token') || '';
-let username = localStorage.getItem('chat_username') || '';
+let token = sessionStorage.getItem('chat_token') || '';
+let username = sessionStorage.getItem('chat_username') || '';
 let currentPrompt = null;
 
 const userDisplay = document.getElementById('userDisplay');
@@ -11,6 +11,9 @@ const promptsGrid = document.getElementById('promptsGrid');
 const emptyState = document.getElementById('emptyState');
 
 const uploadModal = document.getElementById('uploadModal');
+const promptSelectWrap = document.getElementById('promptSelectWrap');
+const promptSelectTrigger = document.getElementById('promptSelectTrigger');
+const promptSelectDropdown = document.getElementById('promptSelectDropdown');
 const promptSelect = document.getElementById('promptSelect');
 const userMessage = document.getElementById('userMessage');
 const imageInput = document.getElementById('imageInput');
@@ -63,7 +66,7 @@ function init() {
         window.location.href = '/';
         return;
     }
-    showLoggedIn(username);
+    userDisplay.textContent = username;
     loadPrompts();
 }
 
@@ -111,7 +114,7 @@ function renderPrompts(prompts) {
         const date = new Date(p.createdAt).toLocaleDateString('zh-CN');
         const avatarSrc = p.userAvatar ? ` src="${escapeHtml(p.userAvatar)}"` : '';
         html += `<div class="prompt-card-hub" data-id="${p.id}">
-                    ${p.imageUrl ? `<img src="${p.imageUrl}" class="card-image" alt="${p.name}">` : ''}
+                    ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" class="card-image" alt="${escapeHtml(p.name)}">` : ''}
                     <div class="card-body">
                         <h3 class="card-title">${escapeHtml(p.name)}</h3>
                         <p class="card-preview">${escapeHtml(p.content).substring(0, 100)}...</p>
@@ -160,7 +163,7 @@ async function showDetail(id) {
         detailLikes.textContent = p.likesCount || 0;
         detailDate.textContent = new Date(p.createdAt).toLocaleString('zh-CN');
         detailContent.textContent = p.content;
-        detailImage.innerHTML = p.imageUrl ? `<img src="${p.imageUrl}" alt="${p.name}">` : '';
+        detailImage.innerHTML = p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="${escapeHtml(p.name)}">` : '';
         
         if (p.userMessage && p.userMessage.trim()) {
             detailMessage.textContent = p.userMessage;
@@ -211,12 +214,29 @@ async function loadUserPrompts() {
         if (!res.ok) return;
         const prompts = await res.json();
         promptSelect.innerHTML = '<option value="">请选择提示词</option>';
+        promptSelectDropdown.innerHTML = '';
         prompts.forEach(p => {
             const option = document.createElement('option');
             option.value = p.id;
             option.textContent = p.name;
             option.dataset.content = p.content;
             promptSelect.appendChild(option);
+
+            const item = document.createElement('div');
+            item.className = 'custom-select-item';
+            item.textContent = p.name;
+            item.dataset.value = p.id;
+            item.dataset.content = p.content;
+            item.onclick = function(e) {
+                e.stopPropagation();
+                promptSelect.value = p.id;
+                promptSelectTrigger.querySelector('.custom-select-text').textContent = p.name;
+                promptSelectWrap.classList.remove('open');
+                // 高亮选中项
+                promptSelectDropdown.querySelectorAll('.custom-select-item').forEach(el => el.classList.remove('selected'));
+                item.classList.add('selected');
+            };
+            promptSelectDropdown.appendChild(item);
         });
     } catch (e) {
         console.error('加载用户提示词失败', e);
@@ -336,8 +356,8 @@ btnLogout.addEventListener('click', logout);
 
 function logout() {
     token = '';
-    localStorage.removeItem('chat_token');
-    localStorage.removeItem('chat_username');
+    sessionStorage.removeItem('chat_token');
+    sessionStorage.removeItem('chat_username');
     window.location.href = '/';
 }
 
@@ -423,7 +443,7 @@ function bindCommentEvents() {
             replyHint.style.display = 'block';
             replyHint.querySelector('span').textContent = `回复 @${replyToUserName}`;
             // 更新hint中的文本
-            replyHint.innerHTML = `回复 <strong>@${replyToUserName}</strong>，<a id="cancelReply">取消</a>`;
+            replyHint.innerHTML = `回复 <strong>@${escapeHtml(replyToUserName)}</strong>，<a id="cancelReply">取消</a>`;
             document.getElementById('cancelReply').addEventListener('click', resetReply);
         });
     });
@@ -623,6 +643,16 @@ cardAddFriendBtn.addEventListener('click', async function() {
             alert(err.error || '申请失败');
         }
     } catch(e) { alert('网络错误'); }
+});
+
+// ======== 自定义下拉框 ========
+function togglePromptDropdown() {
+    promptSelectWrap.classList.toggle('open');
+}
+document.addEventListener('click', function(e) {
+    if (promptSelectWrap && !promptSelectWrap.contains(e.target)) {
+        promptSelectWrap.classList.remove('open');
+    }
 });
 
 init();

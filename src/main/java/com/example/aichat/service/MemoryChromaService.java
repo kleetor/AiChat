@@ -1,47 +1,27 @@
 package com.example.aichat.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
- * ChromaDB 记忆操作层。
- * 与现有 ChromaDBService 并行（后者服务于 RAG 知识库 kb_{kbId}），
- * 本服务服务于用户记忆 mem_{userId}。
+ * ChromaDB 记忆操作服务。
+ * Collection 命名规则：mem_{userId}
  */
 @Service
-public class MemoryChromaService {
-
-    private static final Logger log = LoggerFactory.getLogger(MemoryChromaService.class);
-    private static final String V2_BASE = "/api/v2";
-    private static final String TENANT = "default_tenant";
-    private static final String DATABASE = "default_database";
-
-    private final RestTemplate restTemplate;
-    private final SiliconFlowEmbeddingService embeddingService;
-    private final String chromaUrl;
-
-    /** userId → Collection UUID */
-    private final ConcurrentHashMap<Long, String> uuidCache = new ConcurrentHashMap<>();
+public class MemoryChromaService extends BaseChromaDBService<Long> {
 
     public MemoryChromaService(RestTemplate restTemplate,
                                SiliconFlowEmbeddingService embeddingService,
                                @Value("${chromadb.url}") String chromaUrl) {
-        this.restTemplate = restTemplate;
-        this.embeddingService = embeddingService;
-        this.chromaUrl = chromaUrl;
+        super(restTemplate, embeddingService, chromaUrl);
     }
 
-    private String collectionName(Long userId) {
+    @Override
+    protected String collectionName(Long userId) {
         return "mem_" + userId;
     }
 
@@ -49,42 +29,22 @@ public class MemoryChromaService {
 
     /** 懒创建用户记忆 Collection */
     public void ensureCollection(Long userId) {
-        uuidCache.computeIfAbsent(userId, id -> createCollectionInternal(id));
-    }
-
-    private String createCollectionInternal(Long userId) {
-        String name = collectionName(userId);
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(
-                    Map.of("name", name), headers);
-
-            String url = String.format("%s%s/tenants/%s/databases/%s/collections",
-                    chromaUrl, V2_BASE, TENANT, DATABASE);
-            ResponseEntity<Map> resp = restTemplate.postForEntity(url, request, Map.class);
-
-            @SuppressWarnings("unchecked")
-            String uuid = (String) resp.getBody().get("id");
-            log.info("记忆 Collection 创建: name={}, uuid={}", name, uuid);
-            return uuid;
-        } catch (Exception e) {
-            log.error("创建记忆 Collection 失败: {}", name, e);
-            throw new RuntimeException("创建记忆 Collection 失败", e);
-        }
-    }
-
-    private String getCollectionUuid(Long userId) {
-        return uuidCache.computeIfAbsent(userId, id -> {
+        uuidCache.computeIfAbsent(userId, id -> {
+            String name = collectionName(id);
             try {
-                String name = collectionName(id);
-                String url = String.format("%s%s/tenants/%s/databases/%s/collections/%s",
-                        chromaUrl, V2_BASE, TENANT, DATABASE, name);
-                ResponseEntity<Map> resp = restTemplate.getForEntity(url, Map.class);
-                return (String) resp.getBody().get("id");
+                String url = buildUrl("/collections");
+                var headers = new org.springframework.http.HttpHeaders();
+                headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+                var request = new org.springframework.http.HttpEntity<>(
+                        Map.of("name", name), headers);
+                var resp = restTemplate.postForEntity(url, request, Map.class);
+                @SuppressWarnings("unchecked")
+                String uuid = (String) resp.getBody().get("id");
+                log.info("记忆 Collection 创建: name={}, uuid={}", name, uuid);
+                return uuid;
             } catch (Exception e) {
-                log.warn("获取记忆 Collection UUID 失败: userId={}", id, e);
-                return null;
+                log.error("创建记忆 Collection 失败: {}", name, e);
+                throw new RuntimeException("创建记忆 Collection 失败", e);
             }
         });
     }
@@ -101,19 +61,11 @@ public class MemoryChromaService {
             List<Double> embedding = embeddingService.embed(text);
             String docId = "mem_" + System.currentTimeMillis() + "_" + Thread.currentThread().getId();
 
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("ids", List.of(docId));
-            body.put("embeddings", List.of(embedding));
-            body.put("documents", List.of(text));
-            body.put("metadatas", List.of(metadata != null ? new HashMap<>(metadata) : Map.of()));
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-
-            String url = String.format("%s%s/tenants/%s/databases/%s/collections/%s/add",
-                    chromaUrl, V2_BASE, TENANT, DATABASE, uuid);
-            restTemplate.postForEntity(url, request, String.class);
+            add(uuid,
+                List.of(docId),
+                List.of(embedding),
+                List.of(text),
+                List.of(metadata != null ? new HashMap<>(metadata) : Map.of()));
 
             log.debug("记忆写入 ChromaDB: userId={}, chromaId={}", userId, docId);
             return docId;
@@ -130,20 +82,8 @@ public class MemoryChromaService {
 
         try {
             List<Double> queryEmbedding = embeddingService.embed(query);
-
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("query_embeddings", List.of(queryEmbedding));
-            body.put("n_results", topK);
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-
-            String url = String.format("%s%s/tenants/%s/databases/%s/collections/%s/query",
-                    chromaUrl, V2_BASE, TENANT, DATABASE, uuid);
-            ResponseEntity<Map> resp = restTemplate.postForEntity(url, request, Map.class);
-
-            return parseSearchResult(resp.getBody());
+            Map<String, Object> raw = queryRaw(uuid, queryEmbedding, topK);
+            return parseSearchResult(raw);
         } catch (Exception e) {
             log.warn("记忆搜索失败: userId={}", userId, e);
             return List.of();
@@ -159,16 +99,10 @@ public class MemoryChromaService {
             // 1. 获取旧文档的 metadata
             Map<String, String> oldMeta = Map.of();
             try {
-                Map<String, Object> getBody = Map.of("ids", List.of(chromaId));
-                HttpHeaders getHeaders = new HttpHeaders();
-                getHeaders.setContentType(MediaType.APPLICATION_JSON);
-                HttpEntity<Map<String, Object>> getReq = new HttpEntity<>(getBody, getHeaders);
-                String getUrl = String.format("%s%s/tenants/%s/databases/%s/collections/%s/get",
-                        chromaUrl, V2_BASE, TENANT, DATABASE, uuid);
-                ResponseEntity<Map> getResp = restTemplate.postForEntity(getUrl, getReq, Map.class);
+                Map<String, Object> getResp = getByIds(uuid, List.of(chromaId));
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> metaList =
-                    (List<Map<String, Object>>) ((Map) getResp.getBody()).getOrDefault("metadatas", List.of());
+                    (List<Map<String, Object>>) getResp.getOrDefault("metadatas", List.of());
                 if (!metaList.isEmpty() && metaList.get(0) != null) {
                     oldMeta = metaList.get(0).entrySet().stream()
                         .collect(Collectors.toMap(Map.Entry::getKey, e -> String.valueOf(e.getValue())));
@@ -178,29 +112,15 @@ public class MemoryChromaService {
             }
 
             // 2. 删除旧文档
-            Map<String, Object> delBody = Map.of("ids", List.of(chromaId));
-            HttpHeaders delHeaders = new HttpHeaders();
-            delHeaders.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> delReq = new HttpEntity<>(delBody, delHeaders);
-            String delUrl = String.format("%s%s/tenants/%s/databases/%s/collections/%s/delete",
-                    chromaUrl, V2_BASE, TENANT, DATABASE, uuid);
-            restTemplate.postForEntity(delUrl, delReq, String.class);
+            deleteByIds(uuid, List.of(chromaId));
 
             // 3. 重新向量化并写入
             List<Double> embedding = embeddingService.embed(newText);
-
-            Map<String, Object> addBody = new LinkedHashMap<>();
-            addBody.put("ids", List.of(chromaId));
-            addBody.put("embeddings", List.of(embedding));
-            addBody.put("documents", List.of(newText));
-            addBody.put("metadatas", List.of(new HashMap<>(oldMeta)));
-
-            HttpHeaders addHeaders = new HttpHeaders();
-            addHeaders.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> addReq = new HttpEntity<>(addBody, addHeaders);
-            String addUrl = String.format("%s%s/tenants/%s/databases/%s/collections/%s/add",
-                    chromaUrl, V2_BASE, TENANT, DATABASE, uuid);
-            restTemplate.postForEntity(addUrl, addReq, String.class);
+            add(uuid,
+                List.of(chromaId),
+                List.of(embedding),
+                List.of(newText),
+                List.of(new HashMap<>(oldMeta)));
 
             log.debug("记忆更新: userId={}, chromaId={}", userId, chromaId);
         } catch (Exception e) {
@@ -214,15 +134,7 @@ public class MemoryChromaService {
         if (uuid == null) return;
 
         try {
-            Map<String, Object> body = Map.of("ids", List.of(chromaId));
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-
-            String url = String.format("%s%s/tenants/%s/databases/%s/collections/%s/delete",
-                    chromaUrl, V2_BASE, TENANT, DATABASE, uuid);
-            restTemplate.postForEntity(url, request, String.class);
-
+            deleteByIds(uuid, List.of(chromaId));
             log.debug("记忆删除: userId={}, chromaId={}", userId, chromaId);
         } catch (Exception e) {
             log.warn("记忆删除失败: userId={}, chromaId={}", userId, e);
@@ -231,16 +143,7 @@ public class MemoryChromaService {
 
     /** 清空用户全部记忆 Collection */
     public void deleteAll(Long userId) {
-        String name = collectionName(userId);
-        try {
-            String url = String.format("%s%s/tenants/%s/databases/%s/collections/%s",
-                    chromaUrl, V2_BASE, TENANT, DATABASE, name);
-            restTemplate.delete(url);
-            uuidCache.remove(userId);
-            log.info("记忆 Collection 已删除: {}", name);
-        } catch (Exception e) {
-            log.warn("删除记忆 Collection 失败: {}", name, e);
-        }
+        deleteCollection(userId);
     }
 
     // ==================== 内部类型 ====================

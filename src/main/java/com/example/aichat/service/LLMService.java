@@ -9,12 +9,12 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.*;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
 
 /**
  * 底层 LLM 调用服务。
@@ -28,12 +28,12 @@ public class LLMService {
     private static final double TOKEN_ESTIMATE_RATIO = 1.3;
 
     private final RestTemplate restTemplate;
-    private final ExecutorService chatExecutorService;
+    private final ThreadPoolTaskExecutor chatExecutorService;
     private final MemoryLLMConfig memoryLLMConfig;
     private final ObjectMapper objectMapper;
 
     public LLMService(RestTemplate restTemplate,
-                      ExecutorService chatExecutorService,
+                      ThreadPoolTaskExecutor chatExecutorService,
                       MemoryLLMConfig memoryLLMConfig) {
         this.restTemplate = restTemplate;
         this.chatExecutorService = chatExecutorService;
@@ -49,6 +49,9 @@ public class LLMService {
             String apiUrl = config.getApiUrl();
             String apiKey = config.getApiKey();
             String modelName = config.getModelName();
+
+            // SSRF 防护: 验证 API URL 不指向内网
+            com.example.aichat.util.NetworkUtils.validateExternalUrl(apiUrl);
 
             if (apiKey != null && apiKey.startsWith("AES:")) {
                 logger.error("ModelConfig id={} 的 API Key 解密失败！", config.getId());
@@ -87,7 +90,7 @@ public class LLMService {
                 return new TokenUsageResult(content, promptTokens, completionTokens);
             } catch (Exception e) {
                 logger.error("调用AI服务失败", e);
-                return new TokenUsageResult("AI回复失败：" + e.getMessage(), 0, 0);
+                return new TokenUsageResult("AI 服务暂时不可用，请稍后重试", 0, 0);
             }
         }, chatExecutorService);
     }
@@ -95,6 +98,7 @@ public class LLMService {
     /**
      * 同步调用 LLM (使用 MemoryLLMConfig 环境变量配置)。
      * 供记忆提取、摘要生成、阶梯压缩等内部场景使用。
+     * 使用独立线程池避免与 chatExecutorService 死锁。
      */
     public String chatSync(String prompt) {
         ModelConfig config = new ModelConfig();
@@ -107,8 +111,61 @@ public class LLMService {
         userNode.put("role", "user");
         userNode.put("content", prompt);
 
-        TokenUsageResult result = callAsyncWithUsage(messages, config).join();
+        // 使用独立线程池调用，避免与调用方所在线程池死锁
+        TokenUsageResult result = CompletableFuture.supplyAsync(() ->
+                syncCall(messages, config)
+        ).join();
         return result.getReply();
+    }
+
+    /**
+     * 直接同步调用 LLM（不使用 chatExecutorService），消除线程池死锁风险。
+     */
+    private TokenUsageResult syncCall(ArrayNode messages, ModelConfig config) {
+        String apiUrl = config.getApiUrl();
+        String apiKey = config.getApiKey();
+        String modelName = config.getModelName();
+
+        com.example.aichat.util.NetworkUtils.validateExternalUrl(apiUrl);
+
+        if (apiKey != null && apiKey.startsWith("AES:")) {
+            logger.error("ModelConfig id={} 的 API Key 解密失败！", config.getId());
+        }
+
+        ObjectNode requestBody = objectMapper.createObjectNode();
+        requestBody.put("model", modelName);
+        requestBody.set("messages", messages);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(apiKey);
+
+        HttpEntity<String> entity = new HttpEntity<>(requestBody.toString(), headers);
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(
+                    apiUrl, HttpMethod.POST, entity, String.class);
+            JsonNode root = objectMapper.readTree(response.getBody());
+
+            String content = root.get("choices").get(0).get("message").get("content").asText();
+
+            long promptTokens = 0, completionTokens = 0;
+            JsonNode usage = root.get("usage");
+            if (usage != null) {
+                if (usage.has("prompt_tokens")) promptTokens = usage.get("prompt_tokens").asLong();
+                if (usage.has("completion_tokens")) completionTokens = usage.get("completion_tokens").asLong();
+            }
+
+            if (promptTokens == 0 && completionTokens == 0 && content != null && !content.isEmpty()) {
+                String allMessagesText = messages.toString();
+                promptTokens = Math.round(allMessagesText.length() * TOKEN_ESTIMATE_RATIO);
+                completionTokens = Math.round(content.length() * TOKEN_ESTIMATE_RATIO);
+            }
+
+            return new TokenUsageResult(content, promptTokens, completionTokens);
+        } catch (Exception e) {
+            logger.error("调用AI服务失败", e);
+            return new TokenUsageResult("AI 服务暂时不可用，请稍后重试", 0, 0);
+        }
     }
 
     // ==================== TokenUsageResult ====================

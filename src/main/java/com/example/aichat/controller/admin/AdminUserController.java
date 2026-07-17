@@ -2,7 +2,7 @@ package com.example.aichat.controller.admin;
 
 import com.example.aichat.model.User;
 import com.example.aichat.service.AdminService;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.example.aichat.service.AdminUserService;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,8 +14,13 @@ import java.util.Map;
 @RequestMapping("/api/admin/users")
 public class AdminUserController {
 
-    @Autowired
-    private AdminService adminService;
+    private final AdminService adminService;
+    private final AdminUserService adminUserService;
+
+    public AdminUserController(AdminService adminService, AdminUserService adminUserService) {
+        this.adminService = adminService;
+        this.adminUserService = adminUserService;
+    }
 
     @GetMapping
     public ResponseEntity<Page<User>> getUsers(
@@ -29,8 +34,8 @@ public class AdminUserController {
 
     @GetMapping("/{id}")
     public ResponseEntity<?> getUserDetail(@PathVariable Long id) {
-        User user = adminService.getUserDetail(id);
-        Map<String, Object> stats = adminService.getUserStats(id);
+        User user = adminUserService.getUserDetail(id);
+        Map<String, Object> stats = adminUserService.getUserStats(id);
         return ResponseEntity.ok(Map.of("user", user, "stats", stats));
     }
 
@@ -39,27 +44,39 @@ public class AdminUserController {
             @PathVariable Long id,
             @RequestBody Map<String, Object> body,
             @RequestAttribute("userId") Long reviewerId) {
-        BigDecimal amount = new BigDecimal(body.get("amount").toString());
+        Object amountObj = body.get("amount");
+        if (amountObj == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "金额不能为空"));
+        }
+        BigDecimal amount = new BigDecimal(amountObj.toString());
         String reason = body.getOrDefault("reason", "管理员手动操作").toString();
-        adminService.updateUserBalance(id, amount, reason, reviewerId);
+        adminUserService.updateUserBalance(id, amount, reason, reviewerId);
         return ResponseEntity.ok(Map.of("message", "余额更新成功"));
     }
 
     @PutMapping("/{id}/role")
     public ResponseEntity<?> updateRole(
             @PathVariable Long id,
-            @RequestBody Map<String, String> body) {
+            @RequestBody Map<String, String> body,
+            @RequestAttribute("userId") Long adminId) {
+        if (adminId.equals(id)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "不能修改自己的角色"));
+        }
         String role = body.get("role");
-        adminService.updateUserRole(id, role);
+        adminUserService.updateUserRole(id, role);
         return ResponseEntity.ok(Map.of("message", "角色更新成功"));
     }
 
     @PutMapping("/{id}/status")
     public ResponseEntity<?> updateStatus(
             @PathVariable Long id,
-            @RequestBody Map<String, Boolean> body) {
+            @RequestBody Map<String, Boolean> body,
+            @RequestAttribute("userId") Long adminId) {
+        if (adminId.equals(id)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "不能对自己执行此操作"));
+        }
         Boolean enabled = body.get("enabled");
-        adminService.updateUserStatus(id, enabled);
+        adminUserService.updateUserStatus(id, enabled);
         return ResponseEntity.ok(Map.of("message", "状态更新成功"));
     }
 }

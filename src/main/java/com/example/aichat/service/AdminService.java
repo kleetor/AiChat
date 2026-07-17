@@ -1,14 +1,15 @@
 package com.example.aichat.service;
 
+import com.example.aichat.config.BusinessException;
 import com.example.aichat.model.*;
 import com.example.aichat.repository.*;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -19,22 +20,26 @@ import java.util.*;
 @Service
 public class AdminService {
 
-    @Autowired
-    private UserRepository userRepository;
-    @Autowired
-    private ConversationRepository conversationRepository;
-    @Autowired
-    private ChatMessageRepository chatMessageRepository;
-    @Autowired
-    private TokenUsageRepository tokenUsageRepository;
-    @Autowired
-    private RechargeOrderRepository rechargeOrderRepository;
-    @Autowired
-    private ModelConfigRepository modelConfigRepository;
-    @Autowired
-    private PromptsHubRepository promptsHubRepository;
-    @Autowired
-    private BillingService billingService;
+    private final UserRepository userRepository;
+    private final ConversationRepository conversationRepository;
+    private final ChatMessageRepository chatMessageRepository;
+    private final TokenUsageRepository tokenUsageRepository;
+    private final RechargeOrderRepository rechargeOrderRepository;
+    private final ModelConfigRepository modelConfigRepository;
+
+    public AdminService(UserRepository userRepository,
+                        ConversationRepository conversationRepository,
+                        ChatMessageRepository chatMessageRepository,
+                        TokenUsageRepository tokenUsageRepository,
+                        RechargeOrderRepository rechargeOrderRepository,
+                        ModelConfigRepository modelConfigRepository) {
+        this.userRepository = userRepository;
+        this.conversationRepository = conversationRepository;
+        this.chatMessageRepository = chatMessageRepository;
+        this.tokenUsageRepository = tokenUsageRepository;
+        this.rechargeOrderRepository = rechargeOrderRepository;
+        this.modelConfigRepository = modelConfigRepository;
+    }
 
     // ========== 仪表盘 ==========
     public Map<String, Object> getDashboardStats() {
@@ -52,13 +57,65 @@ public class AdminService {
         LocalDateTime todayEnd = LocalDate.now().atTime(LocalTime.MAX);
         stats.put("todayNewUsers", userRepository.countByCreatedAtBetween(todayStart, todayEnd));
         stats.put("todayMessages", tokenUsageRepository.countTodayMessages(todayStart, todayEnd));
-
         stats.put("pendingReviews", rechargeOrderRepository.findByReviewStatus("PENDING").size());
 
         return stats;
     }
 
-    // ========== 用户管理 ==========
+    public Map<String, Object> getChartData(int days) {
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        LocalDateTime end = LocalDateTime.now();
+        LocalDateTime start = end.minusDays(days);
+
+        List<Object[]> convData = tokenUsageRepository.countConversationsByDateBetween(start, end);
+        List<String> dates = new ArrayList<>();
+        List<Long> convCounts = new ArrayList<>();
+
+        for (int i = days; i >= 0; i--) {
+            dates.add(LocalDate.now().minusDays(i).toString());
+            convCounts.add(0L);
+        }
+
+        for (Object[] row : convData) {
+            String date = row[0] != null ? row[0].toString() : "";
+            Long count = row[1] != null ? ((Number) row[1]).longValue() : 0L;
+            int idx = dates.indexOf(date);
+            if (idx >= 0) {
+                convCounts.set(idx, count);
+            }
+        }
+
+        result.put("dates", dates);
+        result.put("conversationCounts", convCounts);
+
+        List<Object[]> modelData = tokenUsageRepository.sumTokensByModelBetween(start, end);
+        List<Map<String, Object>> modelStats = new ArrayList<>();
+        long totalTokens = 0;
+        for (Object[] row : modelData) {
+            String modelName = row[0] != null ? row[0].toString() : "未知";
+            Long tokens = row[1] != null ? ((Number) row[1]).longValue() : 0L;
+            Long count = row[2] != null ? ((Number) row[2]).longValue() : 0L;
+            totalTokens += tokens;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("modelName", modelName);
+            m.put("totalTokens", tokens);
+            m.put("count", count);
+            modelStats.add(m);
+        }
+
+        for (Map<String, Object> m : modelStats) {
+            Long tokens = (Long) m.get("totalTokens");
+            double percentage = totalTokens > 0 ? (tokens * 100.0 / totalTokens) : 0;
+            m.put("percentage", Math.round(percentage * 100) / 100.0);
+        }
+
+        result.put("modelStats", modelStats);
+
+        return result;
+    }
+
+    // ========== 用户列表查询 ==========
     public Page<User> getUsers(String keyword, int page, int size, String sortBy, String order) {
         Sort sort = "desc".equalsIgnoreCase(order) ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
         Pageable pageable = PageRequest.of(page, size, sort);
@@ -68,96 +125,21 @@ public class AdminService {
         return userRepository.findAll(pageable);
     }
 
-    public User getUserDetail(Long id) {
-        return userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
-    }
-
-    public Map<String, Object> getUserStats(Long userId) {
-        Map<String, Object> stats = new HashMap<>();
-        stats.put("conversationCount", conversationRepository.countByUserId(userId));
-        stats.put("totalSpent", billingService.getTotalSpent(userId));
-        stats.put("totalTokens", billingService.getTotalTokens(userId));
-        return stats;
-    }
-
-    @Transactional
-    public void updateUserBalance(Long userId, BigDecimal amount, String reason, Long reviewerId) {
-        billingService.adminRecharge(userId, amount, reason, reviewerId);
-    }
-
-    @Transactional
-    public User updateUserRole(Long userId, String role) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
-        if (!"USER".equals(role) && !"ADMIN".equals(role)) {
-            throw new RuntimeException("无效的角色");
-        }
-        user.setRole(role);
-        return userRepository.save(user);
-    }
-
-    @Transactional
-    public User updateUserStatus(Long userId, Boolean enabled) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
-        user.setEnabled(enabled);
-        return userRepository.save(user);
-    }
-
-    // ========== 赞助审核 ==========
-    public Page<RechargeOrder> getSponsorReviews(String reviewStatus, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        if (reviewStatus != null && !reviewStatus.isEmpty()) {
-            return rechargeOrderRepository.findByReviewStatus(reviewStatus, pageable);
-        }
-        return rechargeOrderRepository.findAll(pageable);
-    }
-
-    @Transactional
-    public RechargeOrder approveSponsor(Long orderId, BigDecimal tokens, String comment, Long reviewerId) {
-        RechargeOrder order = rechargeOrderRepository.findById(orderId)
-                .orElseThrow(() -> new RuntimeException("订单不存在"));
-        if (!"PENDING".equals(order.getReviewStatus())) {
-            throw new RuntimeException("该订单已审核过");
-        }
-        order.setReviewStatus("APPROVED");
-        order.setReviewComment(comment);
-        order.setReviewerId(reviewerId);
-        order.setReviewedAt(LocalDateTime.now());
-        rechargeOrderRepository.save(order);
-
-        // 增加用户余额
-        billingService.adminRecharge(order.getUserId(), tokens, "赞助审核通过: " + comment, reviewerId);
-        return order;
-    }
-
-    @Transactional
-    public RechargeOrder rejectSponsor(Long orderId, String comment, Long reviewerId) {
-        RechargeOrder order = rechargeOrderRepository.findById(orderId)
-                .orElseThrow(() -> new RuntimeException("订单不存在"));
-        if (!"PENDING".equals(order.getReviewStatus())) {
-            throw new RuntimeException("该订单已审核过");
-        }
-        order.setReviewStatus("REJECTED");
-        order.setReviewComment(comment);
-        order.setReviewerId(reviewerId);
-        order.setReviewedAt(LocalDateTime.now());
-        return rechargeOrderRepository.save(order);
-    }
-
     // ========== 模型配置管理 ==========
+    @Cacheable(value = "modelConfigs", key = "'adminAll'")
     public List<ModelConfig> getModelConfigs() {
         return modelConfigRepository.findAll();
     }
 
+    @CacheEvict(value = "modelConfigs", allEntries = true)
     public ModelConfig createModelConfig(ModelConfig config) {
         return modelConfigRepository.save(config);
     }
 
+    @CacheEvict(value = "modelConfigs", allEntries = true)
     public ModelConfig updateModelConfig(Long id, ModelConfig config) {
         ModelConfig existing = modelConfigRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("模型配置不存在"));
+                .orElseThrow(() -> BusinessException.notFound("模型配置不存在"));
         if (config.getApiKey() != null) existing.setApiKey(config.getApiKey());
         if (config.getApiUrl() != null) existing.setApiUrl(config.getApiUrl());
         if (config.getModelName() != null) existing.setModelName(config.getModelName());
@@ -167,29 +149,9 @@ public class AdminService {
         return modelConfigRepository.save(existing);
     }
 
+    @CacheEvict(value = "modelConfigs", allEntries = true)
     public void deleteModelConfig(Long id) {
         modelConfigRepository.deleteById(id);
-    }
-
-    // ========== 提示词社区管理 ==========
-    public Page<PromptsHub> getPromptsHub(String keyword, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        if (keyword != null && !keyword.isEmpty()) {
-            return promptsHubRepository.searchByKeyword(keyword, pageable);
-        }
-        return promptsHubRepository.findAll(pageable);
-    }
-
-    public void deletePromptHub(Long id) {
-        promptsHubRepository.deleteById(id);
-    }
-
-    @Transactional
-    public PromptsHub setFeatured(Long id, Boolean featured) {
-        PromptsHub prompt = promptsHubRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("提示词不存在"));
-        prompt.setFeatured(featured);
-        return promptsHubRepository.save(prompt);
     }
 
     // ========== 消费记录管理 ==========
@@ -213,16 +175,7 @@ public class AdminService {
     public Page<Conversation> getConversations(Long userId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         if (userId != null) {
-            // 如果提供了 userId，我们需要自己构建分页
-            List<Conversation> conversations = conversationRepository.findByUserIdOrderByCreatedAtDesc(userId);
-            int start = (int) pageable.getOffset();
-            int end = Math.min((start + pageable.getPageSize()), conversations.size());
-            if (start > conversations.size()) {
-                return Page.empty(pageable);
-            }
-            // 简单实现：返回所有然后截取（对于小量数据可以接受）
-            return new org.springframework.data.domain.PageImpl<>(
-                    conversations.subList(start, end), pageable, conversations.size());
+            return conversationRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
         }
         return conversationRepository.findAll(pageable);
     }

@@ -8,17 +8,27 @@ public class PageController {
 
     @GetMapping("/")
     public String index() {
-        return "index";
+        return "forward:/index.html";
+    }
+
+    @GetMapping("/login")
+    public String login() {
+        return "login";
     }
 
     @GetMapping("/chat")
     public String chat() {
-        return "index";
+        return "forward:/index.html";
     }
 
     @GetMapping("/prompt-hub")
     public String promptHub() {
-        return "promptHub";
+        return "workshop";
+    }
+
+    @GetMapping("/workshop")
+    public String workshop() {
+        return "workshop";
     }
 
     @GetMapping("/admin")

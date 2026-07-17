@@ -1,5 +1,6 @@
 package com.example.aichat.service;
 
+import com.example.aichat.config.BusinessException;
 import com.example.aichat.model.FriendMessage;
 import com.example.aichat.model.Friendship;
 import com.example.aichat.model.User;
@@ -70,11 +71,11 @@ public class FriendService {
     @Transactional
     public void sendFriendRequest(Long fromUserId, Long toUserId) {
         if (fromUserId.equals(toUserId)) {
-            throw new RuntimeException("不能添加自己为好友");
+            throw BusinessException.badRequest("不能添加自己为好友");
         }
         // 检查是否已存在
         if (friendshipRepository.existsActiveRelation(fromUserId, toUserId)) {
-            throw new RuntimeException("已经是好友或已发送过申请");
+            throw BusinessException.conflict("已经是好友或已发送过申请");
         }
         Friendship fs = Friendship.builder()
                 .userId(fromUserId)  // 发起方
@@ -98,9 +99,9 @@ public class FriendService {
     @Transactional
     public void acceptRequest(Long friendshipId, Long currentUserId) {
         Friendship fs = friendshipRepository.findById(friendshipId)
-                .orElseThrow(() -> new RuntimeException("申请不存在"));
+                .orElseThrow(() -> BusinessException.notFound("申请不存在"));
         if (!fs.getFriendId().equals(currentUserId)) {
-            throw new RuntimeException("无权操作");
+            throw BusinessException.forbidden("无权操作");
         }
         fs.setStatus("ACCEPTED");
         friendshipRepository.save(fs);
@@ -120,9 +121,9 @@ public class FriendService {
     @Transactional
     public void rejectRequest(Long friendshipId, Long currentUserId) {
         Friendship fs = friendshipRepository.findById(friendshipId)
-                .orElseThrow(() -> new RuntimeException("申请不存在"));
+                .orElseThrow(() -> BusinessException.notFound("申请不存在"));
         if (!fs.getFriendId().equals(currentUserId)) {
-            throw new RuntimeException("无权操作");
+            throw BusinessException.forbidden("无权操作");
         }
         fs.setStatus("REJECTED");
         friendshipRepository.save(fs);
@@ -169,9 +170,9 @@ public class FriendService {
             User fromUser = userRepository.findById(fs.getUserId()).orElse(null);
             if (fromUser == null) continue;
             Map<String, Object> m = new LinkedHashMap<>();
-            m.put("id", fs.getId());
-            m.put("userId", fromUser.getId());
-            m.put("username", fromUser.getUsername());
+            m.put("friendshipId", fs.getId());
+            m.put("fromUserId", fromUser.getId());
+            m.put("fromUsername", fromUser.getUsername());
             m.put("avatarUrl", fromUser.getAvatarUrl() != null ? fromUser.getAvatarUrl() : "");
             m.put("createdAt", fs.getCreatedAt());
             result.add(m);
@@ -183,9 +184,9 @@ public class FriendService {
     @Transactional
     public FriendMessage sendMessage(Long senderId, Long friendshipId, String content) {
         Friendship fs = friendshipRepository.findById(friendshipId)
-                .orElseThrow(() -> new RuntimeException("好友关系不存在"));
+                .orElseThrow(() -> BusinessException.notFound("好友关系不存在"));
         if (!fs.getStatus().equals("ACCEPTED")) {
-            throw new RuntimeException("你们还不是好友");
+            throw BusinessException.badRequest("你们还不是好友");
         }
         Long receiverId = fs.getUserId().equals(senderId) ? fs.getFriendId() : fs.getUserId();
 

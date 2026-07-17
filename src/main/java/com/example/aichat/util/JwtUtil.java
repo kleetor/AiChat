@@ -2,15 +2,22 @@ package com.example.aichat.util;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Date;
 
 @Component
 public class JwtUtil {
+
+    private static final Logger logger = LoggerFactory.getLogger(JwtUtil.class);
 
     @Value("${jwt.secret}")
     private String secret;
@@ -18,9 +25,29 @@ public class JwtUtil {
     @Value("${jwt.expiration}")
     private long expiration;
 
+    private byte[] signingKeyBytes;
+
+    @PostConstruct
+    public void init() {
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        logger.info("JWT密钥原始长度: {} 字节 (HS256 要求 ≥ 32 字节)", keyBytes.length);
+
+        if (keyBytes.length < 32) {
+            logger.warn("JWT密钥长度不足 ({} < 32 字节)，将使用 SHA-256 哈希自动扩展至 32 字节", keyBytes.length);
+            try {
+                MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                keyBytes = digest.digest(keyBytes);
+            } catch (NoSuchAlgorithmException e) {
+                throw new RuntimeException("SHA-256算法不可用，无法自动扩展JWT密钥", e);
+            }
+            logger.warn("JWT密钥已通过 SHA-256 哈希扩展至 32 字节，建议更新 .env 中 JWT_SECRET 为至少 32 字节的强密钥");
+        }
+
+        this.signingKeyBytes = keyBytes;
+    }
+
     private SecretKey getSigningKey() {
-        // JJWT 0.12.x 要求密钥至少 256 位（32字节）
-        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        return Keys.hmacShaKeyFor(signingKeyBytes);
     }
 
     public String generateToken(Long userId, String username) {

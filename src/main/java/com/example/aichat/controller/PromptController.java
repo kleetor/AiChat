@@ -1,15 +1,16 @@
 // controller/PromptController.java
 package com.example.aichat.controller;
 
+import com.example.aichat.dto.PromptCreateRequest;
 import com.example.aichat.model.Prompt;
 import com.example.aichat.service.PromptService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/prompts")
@@ -25,41 +26,26 @@ public class PromptController {
     }
 
     @PostMapping
-    public ResponseEntity<Prompt> createPrompt(@RequestBody Map<String, String> body,
+    public ResponseEntity<Prompt> createPrompt(@Valid @RequestBody PromptCreateRequest body,
                                                Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
-        String name = body.get("name");
-        String content = body.get("content");
-        if (name == null || name.isBlank() || content == null || content.isBlank()) {
-            return ResponseEntity.badRequest().build();
-        }
-        Prompt prompt = promptService.createPrompt(userId, name, content);
+        Prompt prompt = promptService.createPrompt(userId, body.getName(), body.getContent());
         return ResponseEntity.ok(prompt);
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<Prompt> updatePrompt(@PathVariable Long id,
-                                               @RequestBody Map<String, String> body,
+                                               @Valid @RequestBody PromptCreateRequest body,
                                                Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
-        String name = body.get("name");
-        String content = body.get("content");
-        try {
-            Prompt prompt = promptService.updatePrompt(id, userId, name, content);
-            return ResponseEntity.ok(prompt);
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(null);
-        }
+        Prompt prompt = promptService.updatePrompt(id, userId, body.getName(), body.getContent());
+        return ResponseEntity.ok(prompt);
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deletePrompt(@PathVariable Long id, Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
-        try {
-            promptService.deletePrompt(id, userId);
-            return ResponseEntity.ok().build();
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+        promptService.deletePrompt(id, userId);
+        return ResponseEntity.ok().build();
     }
 }

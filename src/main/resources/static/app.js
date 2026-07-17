@@ -1,8 +1,8 @@
 
     // ======== 全局状态 ========
     const API = ''; // 同源
-    let token = localStorage.getItem('chat_token') || '';
-    let username = localStorage.getItem('chat_username') || '';
+    let token = sessionStorage.getItem('chat_token') || '';
+    let username = sessionStorage.getItem('chat_username') || '';
     let currentConvId = null;          // 当前选中的会话ID
     let currentPromptId = null;        // 当前选中的提示词ID
     let currentModelConfigId = null;   // 当前选中的模型配置ID
@@ -161,7 +161,7 @@
     // ======== UI 状态 ========
     function showLoggedIn(name) {
         username = name;
-        localStorage.setItem('chat_username', name);
+        sessionStorage.setItem('chat_username', name);
         userDisplay.textContent = `${name}`;
         btnLogin.style.display = 'none';
         btnLogout.style.display = 'inline-block';
@@ -199,8 +199,8 @@
 
     function showLoggedOut() {
         username = '';
-        localStorage.removeItem('chat_username');
-        localStorage.removeItem('chat_token');
+        sessionStorage.removeItem('chat_username');
+        sessionStorage.removeItem('chat_token');
         localStorage.removeItem('current_prompt_id');
         localStorage.removeItem('current_model_config_id');
         token = '';
@@ -459,8 +459,8 @@
                 }
                 token = data.token;
                 username = data.username;
-                localStorage.setItem('chat_token', token);
-                localStorage.setItem('chat_username', username);
+                sessionStorage.setItem('chat_token', token);
+                sessionStorage.setItem('chat_username', username);
                 showLoggedIn(username);
                 closeAuthModal();
                 loadConversations();
@@ -489,8 +489,8 @@
                 token = data.token;
                 username = data.username;
                 const balance = data.balance || 0;
-                localStorage.setItem('chat_token', token);
-                localStorage.setItem('chat_username', username);
+                sessionStorage.setItem('chat_token', token);
+                sessionStorage.setItem('chat_username', username);
                 showLoggedIn(username);
                 closeAuthModal();
                 loadConversations();
@@ -518,8 +518,8 @@
 
     function logout() {
         token = '';
-        localStorage.removeItem('chat_token');
-        localStorage.removeItem('chat_username');
+        sessionStorage.removeItem('chat_token');
+        sessionStorage.removeItem('chat_username');
         localStorage.removeItem('current_prompt_id');
         localStorage.removeItem('current_model_config_id');
         showLoggedOut();
@@ -768,7 +768,7 @@
 
     hubPromptBtn.addEventListener('click', () => {
         promptModal.classList.remove('show');
-        window.location.href = '/prompt-hub';
+        window.location.href = '/workshop';
     });
 
     // 静默加载提示词（用于恢复选中名称）
@@ -1002,18 +1002,28 @@
                 const icon = typeIconMap[n.type] || '🔔';
                 const time = new Date(n.createdAt).toLocaleString('zh-CN');
                 const unreadClass = n.isRead ? '' : 'unread';
-                html += `<div class="msg-notif ${unreadClass}" data-type="${n.type || ''}" data-prompt-id="${n.promptId || ''}">
+                html += `<div class="msg-notif ${unreadClass}" data-id="${n.id}" data-type="${n.type || ''}" data-prompt-id="${n.promptId || ''}" data-read="${n.isRead}">
+                    <button class="msg-notif-delete" title="删除">×</button>
                     <div><span class="notif-icon">${icon}</span><span class="notif-title">${escapeHtml(n.title)}</span></div>
                     ${n.content ? `<div class="notif-content">${escapeHtml(n.content)}</div>` : ''}
                     <div class="notif-time">${time}</div>
                 </div>`;
             });
             messageList.innerHTML = html;
-            // 点击通知跳转
+            // 点击通知：标记已读 + 跳转
             messageList.querySelectorAll('.msg-notif').forEach(item => {
-                item.addEventListener('click', function() {
+                item.addEventListener('click', function(e) {
+                    if (e.target.closest('.msg-notif-delete')) return;
+                    const id = parseInt(this.dataset.id);
                     const type = this.dataset.type;
                     const promptId = this.dataset.promptId;
+                    // 标记已读
+                    if (this.dataset.read === 'false') {
+                        markNotificationRead(id);
+                        this.classList.remove('unread');
+                        this.dataset.read = 'true';
+                    }
+                    // 跳转
                     if (type === 'FRIEND_REQUEST' || type === 'FRIEND_ACCEPT' || type === 'FRIEND_MESSAGE') {
                         messageModal.classList.remove('show');
                         openFriendModal();
@@ -1022,8 +1032,41 @@
                     }
                 });
             });
+            // 删除按钮
+            messageList.querySelectorAll('.msg-notif-delete').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const id = parseInt(this.closest('.msg-notif').dataset.id);
+                    deleteNotification(id);
+                });
+            });
         } catch (e) {
             console.error('加载消息失败', e);
+        }
+    }
+
+    async function markNotificationRead(id) {
+        try {
+            await fetch(API + '/api/notifications/' + id + '/read', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            loadUnreadCount();
+        } catch (e) { /* 静默失败 */ }
+    }
+
+    async function deleteNotification(id) {
+        try {
+            const res = await fetch(API + '/api/notifications/' + id, {
+                method: 'DELETE',
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (res.ok) {
+                loadNotifications();
+                loadUnreadCount();
+            }
+        } catch (e) {
+            console.error('删除消息失败', e);
         }
     }
 
@@ -1869,11 +1912,26 @@
         const file = e.target.files[0];
         if (!file) return;
 
-        // 显示上传中状态
+        // 清空 file input 以便可以重新选择同一文件
+        imageInput.value = '';
+
+        // 1. 立即显示 loading 预览条
         uploadBtn.disabled = true;
         uploadBtn.innerHTML = '<i data-lucide="loader-circle"></i>';
         lucide.createIcons();
         currentImageDescription = null;
+
+        // 读取本地预览图
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+            previewImg.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+
+        // 显示预览条（loading 状态）
+        const previewLabel = uploadPreview.querySelector('.preview-label');
+        if (previewLabel) previewLabel.textContent = '正在分析图片...';
+        uploadPreview.style.display = 'flex';
 
         const formData = new FormData();
         formData.append('file', file);
@@ -1891,16 +1949,11 @@
             }
 
             const data = await res.json();
+            // 图片描述仅存储在内存中，随消息隐式发送，不暴露在 UI 中
             currentImageDescription = data.description;
 
-            // 显示预览
-            const reader = new FileReader();
-            reader.onload = function(ev) {
-                previewImg.src = ev.target.result;
-                uploadPreview.style.display = 'flex';
-            };
-            reader.readAsDataURL(file);
-
+            // 更新预览条为完成状态
+            if (previewLabel) previewLabel.textContent = '图片处理完成，识别结果将随消息发送';
             uploadBtn.innerHTML = '<i data-lucide="check-circle"></i>';
             lucide.createIcons();
         } catch (err) {
@@ -1908,10 +1961,11 @@
             uploadBtn.innerHTML = '<i data-lucide="image"></i>';
             lucide.createIcons();
             uploadBtn.disabled = currentModelConfigId !== null;
+            uploadPreview.style.display = 'none';
             currentImageDescription = null;
         }
 
-        // 清空 file input 以便可以重新选择同一文件
+        // 清空 file input（reader 已读取）
         imageInput.value = '';
     }
 
@@ -2194,12 +2248,12 @@
             let html = '';
             list.forEach(r => {
                 const avatarSrc = r.avatarUrl ? ` src="${escapeHtml(r.avatarUrl)}"` : '';
-                html += `<div class="friend-request-item" data-id="${r.id}">
+                html += `<div class="friend-request-item" data-id="${r.friendshipId}">
                     <img class="r-avatar"${avatarSrc} alt="">
-                    <div class="r-info"><div class="r-name">${escapeHtml(r.username)}</div></div>
+                    <div class="r-info"><div class="r-name">${escapeHtml(r.fromUsername)}</div></div>
                     <div class="r-actions">
-                        <button class="r-accept" data-id="${r.id}">接受</button>
-                        <button class="r-reject" data-id="${r.id}">拒绝</button>
+                        <button class="r-accept" data-id="${r.friendshipId}">接受</button>
+                        <button class="r-reject" data-id="${r.friendshipId}">拒绝</button>
                     </div>
                 </div>`;
             });

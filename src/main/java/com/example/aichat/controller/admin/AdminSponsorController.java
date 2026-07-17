@@ -1,8 +1,7 @@
 package com.example.aichat.controller.admin;
 
 import com.example.aichat.model.RechargeOrder;
-import com.example.aichat.service.AdminService;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.example.aichat.service.SponsorReviewService;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,15 +13,18 @@ import java.util.Map;
 @RequestMapping("/api/admin/sponsor-reviews")
 public class AdminSponsorController {
 
-    @Autowired
-    private AdminService adminService;
+    private final SponsorReviewService sponsorReviewService;
+
+    public AdminSponsorController(SponsorReviewService sponsorReviewService) {
+        this.sponsorReviewService = sponsorReviewService;
+    }
 
     @GetMapping
     public ResponseEntity<Page<RechargeOrder>> getReviews(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "PENDING") String status) {
-        return ResponseEntity.ok(adminService.getSponsorReviews(status, page, size));
+        return ResponseEntity.ok(sponsorReviewService.getSponsorReviews(status, page, size));
     }
 
     @PutMapping("/{orderId}/approve")
@@ -32,7 +34,7 @@ public class AdminSponsorController {
             @RequestAttribute("userId") Long reviewerId) {
         BigDecimal tokens = new BigDecimal(body.get("tokens").toString());
         String comment = body.getOrDefault("comment", "").toString();
-        adminService.approveSponsor(orderId, tokens, comment, reviewerId);
+        sponsorReviewService.approveSponsor(orderId, tokens, comment, reviewerId);
         return ResponseEntity.ok(Map.of("message", "审核通过"));
     }
 
@@ -42,7 +44,7 @@ public class AdminSponsorController {
             @RequestBody Map<String, String> body,
             @RequestAttribute("userId") Long reviewerId) {
         String comment = body.getOrDefault("comment", "");
-        adminService.rejectSponsor(orderId, comment, reviewerId);
+        sponsorReviewService.rejectSponsor(orderId, comment, reviewerId);
         return ResponseEntity.ok(Map.of("message", "已拒绝"));
     }
 }
