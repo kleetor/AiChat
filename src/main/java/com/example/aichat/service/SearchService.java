@@ -1,12 +1,12 @@
 package com.example.aichat.service;
 
+import com.example.aichat.config.props.QianfanProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -21,16 +21,12 @@ public class SearchService {
 
     private static final Logger logger = LoggerFactory.getLogger(SearchService.class);
 
-    @Value("${qianfan.api.key}")
-    private String apiKey;
-
-    @Value("${qianfan.api.url:https://qianfan.baidubce.com/v2/ai_search/web_search}")
-    private String apiUrl;
-
+    private final QianfanProperties qianfanProperties;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
-    public SearchService(RestTemplate restTemplate, ObjectMapper objectMapper) {
+    public SearchService(QianfanProperties qianfanProperties, RestTemplate restTemplate, ObjectMapper objectMapper) {
+        this.qianfanProperties = qianfanProperties;
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
     }
@@ -56,13 +52,13 @@ public class SearchService {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("X-Appbuilder-Authorization", "Bearer " + apiKey);
+        headers.set("X-Appbuilder-Authorization", "Bearer " + qianfanProperties.getKey());
 
         HttpEntity<String> entity = new HttpEntity<>(requestBody.toString(), headers);
 
         try {
             ResponseEntity<String> response = restTemplate.exchange(
-                    apiUrl,
+                    qianfanProperties.getUrl(),
                     HttpMethod.POST,
                     entity,
                     String.class

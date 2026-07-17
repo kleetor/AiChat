@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Wallet, Heart, Upload, Camera, Coins } from "lucide-react";
+import { X, Wallet, Heart, Upload, Camera, Coins, CalendarCheck, CheckCircle, Loader2 } from "lucide-react";
 import type { TokenUsage } from "@/lib/services";
 
 interface WalletModalProps {
@@ -8,6 +8,8 @@ interface WalletModalProps {
   balance: string;
   usageRecords: TokenUsage[];
   onSponsor: (file: File, amount: number) => Promise<void>;
+  checkedIn: boolean;
+  onCheckin: () => Promise<void>;
 }
 
 export default function WalletModal({
@@ -16,6 +18,8 @@ export default function WalletModal({
   balance,
   usageRecords,
   onSponsor,
+  checkedIn,
+  onCheckin,
 }: WalletModalProps) {
   const [showSponsor, setShowSponsor] = useState(false);
   const [sponsorFile, setSponsorFile] = useState<File | null>(null);
@@ -23,6 +27,7 @@ export default function WalletModal({
   const [sponsorAmount, setSponsorAmount] = useState("");
   const [sponsorError, setSponsorError] = useState("");
   const [sponsorSubmitting, setSponsorSubmitting] = useState(false);
+  const [checkinLoading, setCheckinLoading] = useState(false);
 
   if (!open) return null;
 
@@ -148,10 +153,39 @@ export default function WalletModal({
                 <Coins size={22} className="text-[#d4839a]" />
                 {balance}
               </p>
-              <button onClick={() => setShowSponsor(true)}
-                className="mt-4 inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:opacity-90">
-                <Heart size={14} /> 赞助
-              </button>
+              <div className="mt-4 flex items-center justify-center gap-3">
+                <button onClick={() => setShowSponsor(true)}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:opacity-90">
+                  <Heart size={14} /> 赞助
+                </button>
+                <button
+                  onClick={async () => {
+                    setCheckinLoading(true);
+                    try {
+                      await onCheckin();
+                      alert("签到成功！获得 ¥0.2500");
+                    } catch (e: unknown) {
+                      alert(e instanceof Error ? e.message : "签到失败");
+                    } finally {
+                      setCheckinLoading(false);
+                    }
+                  }}
+                  disabled={checkedIn || checkinLoading}
+                  className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-medium transition-colors ${
+                    checkedIn
+                      ? "bg-muted text-muted-foreground cursor-not-allowed"
+                      : "bg-amber-500 text-white hover:bg-amber-600"
+                  } disabled:opacity-60`}
+                >
+                  {checkedIn ? (
+                    <><CheckCircle size={14} /> 已签到</>
+                  ) : checkinLoading ? (
+                    <><Loader2 size={14} className="animate-spin" /> 签到中</>
+                  ) : (
+                    <><CalendarCheck size={14} /> 签到</>
+                  )}
+                </button>
+              </div>
             </div>
 
             {/* Usage Records */}

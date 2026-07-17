@@ -2,7 +2,9 @@ package com.example.aichat.controller;
 
 import com.example.aichat.model.RechargeOrder;
 import com.example.aichat.model.TokenUsage;
+import com.example.aichat.model.User;
 import com.example.aichat.repository.TokenUsageRepository;
+import com.example.aichat.repository.UserRepository;
 import com.example.aichat.service.BillingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -19,6 +21,7 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -32,6 +35,9 @@ public class BillingController {
 
     @Autowired
     private TokenUsageRepository tokenUsageRepository;
+
+    @Autowired
+    private UserRepository userRepository;
 
     @GetMapping("/balance")
     public ResponseEntity<Map<String, Object>> getBalance(Authentication authentication) {
@@ -197,5 +203,31 @@ public class BillingController {
             result.put("message", e.getMessage());
             return ResponseEntity.badRequest().body(result);
         }
+    }
+
+    // ===== 每日签到 =====
+    @PostMapping("/checkin")
+    public ResponseEntity<Map<String, Object>> dailyCheckin(Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        try {
+            Map<String, Object> result = billingService.dailyCheckin(userId);
+            return ResponseEntity.ok(result);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    @GetMapping("/checkin-status")
+    public ResponseEntity<Map<String, Object>> checkinStatus(Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        User user = userRepository.findById(userId).orElse(null);
+        boolean checkedIn = user != null && user.getLastCheckinDate() != null
+                && user.getLastCheckinDate().equals(LocalDate.now());
+        Map<String, Object> result = new HashMap<>();
+        result.put("checkedIn", checkedIn);
+        return ResponseEntity.ok(result);
     }
 }

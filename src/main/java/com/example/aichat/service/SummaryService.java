@@ -1,12 +1,12 @@
 package com.example.aichat.service;
 
+import com.example.aichat.config.props.SummaryProperties;
 import com.example.aichat.model.ConversationSummary;
 import com.example.aichat.repository.ChatMessageRepository;
 import com.example.aichat.repository.ConversationSummaryRepository;
 import com.example.aichat.model.ChatMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -25,22 +25,16 @@ public class SummaryService {
     private final ChatMessageRepository messageRepo;
     private final ConversationSummaryRepository summaryRepo;
     private final LLMService llmService;
-
-    @Value("${summary.trigger.count:20}")
-    private int triggerCount;
-
-    @Value("${summary.refresh.interval:10}")
-    private int refreshInterval;
-
-    @Value("${summary.keep.recent:10}")
-    private int keepRecent;
+    private final SummaryProperties summaryProperties;
 
     public SummaryService(ChatMessageRepository messageRepo,
                           ConversationSummaryRepository summaryRepo,
-                          LLMService llmService) {
+                          LLMService llmService,
+                          SummaryProperties summaryProperties) {
         this.messageRepo = messageRepo;
         this.summaryRepo = summaryRepo;
         this.llmService = llmService;
+        this.summaryProperties = summaryProperties;
     }
 
     /** 检查并异步生成摘要 */
@@ -50,8 +44,8 @@ public class SummaryService {
             int msgCount = messageRepo.countByConversationId(conversationId);
             ConversationSummary latest = summaryRepo.findByConversationId(conversationId);
 
-            boolean shouldGenerate = (latest == null && msgCount >= triggerCount)
-                    || (latest != null && msgCount - latest.getMessageCountAtGeneration() >= refreshInterval);
+            boolean shouldGenerate = (latest == null && msgCount >= summaryProperties.getTrigger().getCount())
+                    || (latest != null && msgCount - latest.getMessageCountAtGeneration() >= summaryProperties.getRefresh().getInterval());
 
             if (shouldGenerate) {
                 generate(conversationId, msgCount);
@@ -64,7 +58,7 @@ public class SummaryService {
     private void generate(Long conversationId, int msgCount) {
         try {
             List<ChatMessage> all = messageRepo.findByConversationIdOrderByTimestampAsc(conversationId);
-            int end = Math.max(0, all.size() - keepRecent);
+            int end = Math.max(0, all.size() - summaryProperties.getKeep().getRecent());
             if (end <= 0) return;
 
             List<ChatMessage> toSummarize = all.subList(0, end);

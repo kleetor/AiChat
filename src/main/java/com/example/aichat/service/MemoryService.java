@@ -1,11 +1,11 @@
 package com.example.aichat.service;
 
+import com.example.aichat.config.props.MemoryProperties;
 import com.example.aichat.model.MemoryItem;
 import com.example.aichat.model.MemoryItem.DetailLevel;
 import com.example.aichat.repository.MemoryItemRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Async;
@@ -34,28 +34,16 @@ public class MemoryService {
     private final MemoryChromaService chromaService;
     private final MemoryItemRepository memoryRepo;
     private final LLMService llmService;
-
-    @Value("${memory.inject.recent-count:20}")
-    private int injectRecentCount;
-
-    @Value("${memory.search.top-k:10}")
-    private int searchTopK;
-
-    @Value("${memory.decay.fresh-days:3}")
-    private int freshDays;
-
-    @Value("${memory.decay.brief-days:7}")
-    private int briefDays;
-
-    @Value("${memory.decay.forget-days:14}")
-    private int forgetDays;
+    private final MemoryProperties memoryProperties;
 
     public MemoryService(MemoryChromaService chromaService,
                          MemoryItemRepository memoryRepo,
-                         LLMService llmService) {
+                         LLMService llmService,
+                         MemoryProperties memoryProperties) {
         this.chromaService = chromaService;
         this.memoryRepo = memoryRepo;
         this.llmService = llmService;
+        this.memoryProperties = memoryProperties;
     }
 
     // ==================== 模式1: 自动提取 ====================
@@ -123,7 +111,7 @@ public class MemoryService {
     public List<MemoryItem> getRecentMemoriesForContext(Long userId) {
         List<MemoryItem> memories = memoryRepo.findTopNEnabled(userId,
                 List.of(DetailLevel.FULL, DetailLevel.BRIEF),
-                PageRequest.of(0, injectRecentCount,
+                PageRequest.of(0, memoryProperties.getInject().getRecentCount(),
                         Sort.by(Sort.Direction.DESC, "lastAccessedAt")));
 
         // 懒衰减: 每条记忆检查是否该降级/删除
@@ -155,7 +143,7 @@ public class MemoryService {
     @Transactional
     public List<MemoryItem> searchAndRecall(Long userId, String query) {
         try {
-            var hits = chromaService.search(userId, query, searchTopK);
+            var hits = chromaService.search(userId, query, memoryProperties.getSearchTopK());
             if (hits.isEmpty()) return List.of();
 
             List<String> chromaIds = hits.stream()
@@ -203,7 +191,8 @@ public class MemoryService {
 
         // FULL → BRIEF: 超过 freshDays 天未访问
         if (level == DetailLevel.FULL) {
-            LocalDateTime threshold = item.getLastAccessedAt().plusDays(freshDays);
+            LocalDateTime threshold = item.getLastAccessedAt().plusDays(
+                    memoryProperties.getDecay().getFreshDays());
             if (now.isAfter(threshold)) {
                 String fallback = truncateText(item.getValue(), 200);
                 String originalValue = item.getValue();
@@ -220,7 +209,8 @@ public class MemoryService {
         }
         // BRIEF → TITLE: 超过 briefDays 天未访问
         else if (level == DetailLevel.BRIEF) {
-            LocalDateTime threshold = item.getLastAccessedAt().plusDays(briefDays);
+            LocalDateTime threshold = item.getLastAccessedAt().plusDays(
+                    memoryProperties.getDecay().getBriefDays());
             if (now.isAfter(threshold)) {
                 String fallback = truncateText(item.getValue(), 50);
                 String originalValue = item.getValue();
@@ -236,7 +226,8 @@ public class MemoryService {
         }
         // TITLE → 遗忘: 超过 forgetDays 天未访问
         else if (level == DetailLevel.TITLE) {
-            LocalDateTime threshold = item.getLastAccessedAt().plusDays(forgetDays);
+            LocalDateTime threshold = item.getLastAccessedAt().plusDays(
+                    memoryProperties.getDecay().getForgetDays());
             if (now.isAfter(threshold)) {
                 try { chromaService.deleteMemory(item.getUserId(), item.getChromaId()); }
                 catch (Exception e) { log.warn("ChromaDB 删除过期记忆失败: id={}", item.getId(), e); }

@@ -1,27 +1,24 @@
 package com.example.aichat.config;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
+import com.example.aichat.config.props.ChromaDbProperties;
+import com.example.aichat.config.props.EmbeddingProperties;
+
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.client.RestTemplate;
 
 @Configuration
 public class ChromaDBConfig {
 
-    @Value("${chromadb.url}")
-    private String chromaUrl;
+    private final ChromaDbProperties chromaDbProperties;
+    private final EmbeddingProperties embeddingProperties;
 
-    @Value("${embedding.api.url}")
-    private String embeddingApiUrl;
+    public ChromaDBConfig(ChromaDbProperties chromaDbProperties,
+                          EmbeddingProperties embeddingProperties) {
+        this.chromaDbProperties = chromaDbProperties;
+        this.embeddingProperties = embeddingProperties;
+    }
 
-    @Value("${embedding.api.key}")
-    private String embeddingApiKey;
-
-    @Value("${embedding.model}")
-    private String embeddingModel;
-
-    public String getChromaUrl() { return chromaUrl; }
-    public String getEmbeddingApiUrl() { return embeddingApiUrl; }
-    public String getEmbeddingApiKey() { return embeddingApiKey; }
-    public String getEmbeddingModel() { return embeddingModel; }
+    public String getChromaUrl() { return chromaDbProperties.getUrl(); }
+    public String getEmbeddingApiUrl() { return embeddingProperties.getApiUrl(); }
+    public String getEmbeddingApiKey() { return embeddingProperties.getApiKey(); }
+    public String getEmbeddingModel() { return embeddingProperties.getModel(); }
 }

@@ -1,5 +1,6 @@
 package com.example.aichat.controller;
 
+import com.example.aichat.config.props.AdminProperties;
 import com.example.aichat.dto.*;
 import com.example.aichat.model.User;
 import com.example.aichat.repository.FriendshipRepository;
@@ -7,7 +8,6 @@ import com.example.aichat.repository.PromptsHubRepository;
 import com.example.aichat.service.EmailService;
 import com.example.aichat.service.UserService;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -29,17 +29,23 @@ public class AuthController {
     @Value("${upload.user-pic-dir:./uploads/userPic}")
     private String userPicDir;
 
-    @Autowired
-    private UserService userService;
+    private final AdminProperties adminProperties;
+    private final UserService userService;
+    private final EmailService emailService;
+    private final PromptsHubRepository promptsHubRepository;
+    private final FriendshipRepository friendshipRepository;
 
-    @Autowired
-    private EmailService emailService;
-
-    @Autowired
-    private PromptsHubRepository promptsHubRepository;
-
-    @Autowired
-    private FriendshipRepository friendshipRepository;
+    public AuthController(AdminProperties adminProperties,
+                          UserService userService,
+                          EmailService emailService,
+                          PromptsHubRepository promptsHubRepository,
+                          FriendshipRepository friendshipRepository) {
+        this.adminProperties = adminProperties;
+        this.userService = userService;
+        this.emailService = emailService;
+        this.promptsHubRepository = promptsHubRepository;
+        this.friendshipRepository = friendshipRepository;
+    }
 
     @PostMapping("/send-code")
     public ResponseEntity<Map<String, Object>> sendCode(@Valid @RequestBody SendCodeRequest request) {

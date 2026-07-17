@@ -1,12 +1,12 @@
 package com.example.aichat.config;
 
+import com.example.aichat.config.props.JwtProperties;
 import com.example.aichat.model.TokenBlacklistEntry;
 import com.example.aichat.repository.TokenBlacklistEntryRepository;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -27,14 +27,14 @@ public class TokenBlacklist {
 
     private final Cache<String, Boolean> blacklist;
     private final TokenBlacklistEntryRepository blacklistRepo;
-    private final long expirationMs;
+    private final JwtProperties jwtProperties;
 
-    public TokenBlacklist(@Value("${jwt.expiration}") long expirationMs,
+    public TokenBlacklist(JwtProperties jwtProperties,
                           TokenBlacklistEntryRepository blacklistRepo) {
-        this.expirationMs = expirationMs;
+        this.jwtProperties = jwtProperties;
         this.blacklistRepo = blacklistRepo;
         this.blacklist = Caffeine.newBuilder()
-                .expireAfterWrite(expirationMs, TimeUnit.MILLISECONDS)
+                .expireAfterWrite(jwtProperties.getExpiration(), TimeUnit.MILLISECONDS)
                 .build();
     }
 
@@ -43,7 +43,7 @@ public class TokenBlacklist {
         blacklist.put(hash, Boolean.TRUE);
         try {
             LocalDateTime expiresAt = LocalDateTime.now().plusNanos(
-                    TimeUnit.MILLISECONDS.toNanos(expirationMs));
+                    TimeUnit.MILLISECONDS.toNanos(jwtProperties.getExpiration()));
             TokenBlacklistEntry entry = TokenBlacklistEntry.builder()
                     .tokenHash(hash)
                     .expiresAt(expiresAt)

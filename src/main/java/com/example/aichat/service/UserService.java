@@ -70,7 +70,7 @@ public class UserService {
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .pid(generatePid())
-                .balance(BigDecimal.ONE) // 新用户赠送1元
+                .balance(BigDecimal.valueOf(3)) // 新用户赠送3元
                 .build();
         user = userRepository.save(user);
         String token = jwtUtil.generateToken(user.getId(), user.getUsername(), "USER");

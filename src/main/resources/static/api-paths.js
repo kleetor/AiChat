@@ -109,7 +109,9 @@
       CREATE: '/api/billing/sponsor',
       HISTORY: '/api/billing/orders',
       BALANCE: '/api/billing/balance',
-      USAGE: '/api/billing/usage'
+      USAGE: '/api/billing/usage',
+      CHECKIN: '/api/billing/checkin',
+      CHECKIN_STATUS: '/api/billing/checkin-status'
     },
 
     // 管理后台

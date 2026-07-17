@@ -1,11 +1,11 @@
 package com.example.aichat.util;
 
+import com.example.aichat.config.props.JwtProperties;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
@@ -19,17 +19,17 @@ public class JwtUtil {
 
     private static final Logger logger = LoggerFactory.getLogger(JwtUtil.class);
 
-    @Value("${jwt.secret}")
-    private String secret;
-
-    @Value("${jwt.expiration}")
-    private long expiration;
+    private final JwtProperties jwtProperties;
 
     private byte[] signingKeyBytes;
 
+    public JwtUtil(JwtProperties jwtProperties) {
+        this.jwtProperties = jwtProperties;
+    }
+
     @PostConstruct
     public void init() {
-        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        byte[] keyBytes = jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8);
         logger.info("JWT密钥原始长度: {} 字节 (HS256 要求 ≥ 32 字节)", keyBytes.length);
 
         if (keyBytes.length < 32) {
@@ -56,7 +56,7 @@ public class JwtUtil {
 
     public String generateToken(Long userId, String username, String role) {
         Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + expiration);
+        Date expiryDate = new Date(now.getTime() + jwtProperties.getExpiration());
 
         return Jwts.builder()
                 .subject(username)
@@ -71,6 +71,11 @@ public class JwtUtil {
     public Long getUserIdFromToken(String token) {
         Claims claims = getClaims(token);
         return claims.get("userId", Long.class);
+    }
+
+    public String getUsernameFromToken(String token) {
+        Claims claims = getClaims(token);
+        return claims.getSubject();
     }
 
     public String getRoleFromToken(String token) {

@@ -32,7 +32,12 @@ SQL/
 # 运行时数据
 chroma_data/
 logs/
-uploads/
+uploads/*
+!uploads/random-covers/
+!uploads/images/
+!uploads/userPic/
+!uploads/kb/
+!uploads/Storepic/
 node_modules/
 
 # 测试

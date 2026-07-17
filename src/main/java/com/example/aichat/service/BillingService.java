@@ -22,8 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 
 @Service
@@ -194,6 +197,7 @@ public class BillingService {
     @Transactional
     @CacheEvict(value = "billingBalance", key = "#userId")
     public RechargeOrder recharge(Long userId, BigDecimal amount, String payChannel) {
+        validateRechargeAmount(amount);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> BusinessException.notFound("用户不存在"));
 
@@ -224,6 +228,18 @@ public class BillingService {
         return "RC" + timestamp + String.format("%04d", random);
     }
 
+    private void validateRechargeAmount(BigDecimal amount) {
+        if (amount == null) {
+            throw BusinessException.badRequest("充值金额不能为空");
+        }
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw BusinessException.badRequest("充值金额必须大于0");
+        }
+        if (amount.compareTo(new BigDecimal("10000")) > 0) {
+            throw BusinessException.badRequest("单笔充值金额不能超过10000");
+        }
+    }
+
     @Cacheable(value = "billingBalance", key = "#userId")
     public BigDecimal getUserBalance(Long userId) {
         User user = userRepository.findById(userId)
@@ -252,6 +268,7 @@ public class BillingService {
     @Transactional
     @CacheEvict(value = "billingBalance", key = "#userId")
     public RechargeOrder adminRecharge(Long userId, BigDecimal amount, String reason, Long reviewerId) {
+        validateRechargeAmount(amount);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> BusinessException.notFound("用户不存在"));
 
@@ -282,6 +299,7 @@ public class BillingService {
 
     @Transactional
     public RechargeOrder createSponsorOrder(Long userId, BigDecimal amount, String sponsorImagePath) {
+        validateRechargeAmount(amount);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> BusinessException.notFound("用户不存在"));
 
@@ -302,5 +320,32 @@ public class BillingService {
         RechargeOrder saved = rechargeOrderRepository.save(order);
         logger.info("赞助审核订单已创建: userId={}, pid={}, amount={}", userId, user.getPid(), amount);
         return saved;
+    }
+
+    // ===== 每日签到 =====
+    private static final BigDecimal CHECKIN_AMOUNT = new BigDecimal("0.2500");
+
+    @Transactional
+    @CacheEvict(value = "billingBalance", key = "#userId")
+    public Map<String, Object> dailyCheckin(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> BusinessException.notFound("用户不存在"));
+
+        LocalDate today = LocalDate.now();
+        if (user.getLastCheckinDate() != null && user.getLastCheckinDate().equals(today)) {
+            throw new BusinessException("今日已签到，请明天再来");
+        }
+
+        user.setLastCheckinDate(today);
+        user.setBalance(user.getBalance().add(CHECKIN_AMOUNT).setScale(4, RoundingMode.HALF_UP));
+        userRepository.save(user);
+
+        logger.info("用户 {} 每日签到，获得: {}，当前余额: {}", userId, CHECKIN_AMOUNT, user.getBalance());
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("amount", CHECKIN_AMOUNT);
+        result.put("balance", user.getBalance());
+        return result;
     }
 }

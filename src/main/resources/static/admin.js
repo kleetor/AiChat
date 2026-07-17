@@ -161,6 +161,7 @@ function switchPage(page, el) {
     else if (page === 'rules') loadRules();
     else if (page === 'usage') loadUsage();
     else if (page === 'conversations') loadConversations();
+    else if (page === 'audit-logs') loadAuditLogs();
     else if (page === 'apitest') resetApiTest();
 
     // 重新渲染 Lucide 图标
@@ -1056,6 +1057,78 @@ async function deleteRule(id) {
 function escHtml(s) {
     if (!s) return '';
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ==================== 操作日志 ====================
+async function loadAuditLogs(page = currentAuditPage) {
+    currentAuditPage = page;
+    const adminId = document.getElementById('auditAdminId')?.value.trim() || '';
+    const action = document.getElementById('auditActionFilter')?.value || '';
+    let url = '/api/admin/audit-logs?page=' + page + '&size=20';
+    if (adminId) url += '&adminId=' + adminId;
+    if (action) url += '&action=' + action;
+
+    try {
+        const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!res.ok) throw new Error('加载失败');
+        const data = await res.json();
+        const tbody = document.getElementById('auditLogTableBody');
+        if (!data || !data.content || data.content.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px">暂无操作日志</td></tr>';
+            document.getElementById('auditPagination').innerHTML = '';
+            return;
+        }
+        tbody.innerHTML = data.content.map(log => `
+            <tr>
+                <td>${formatTime(log.createdAt)}</td>
+                <td><strong>${escHtml(log.adminUsername)}</strong><br><span style="font-size:11px;color:var(--text-muted)">ID: ${log.adminId}</span></td>
+                <td><span class="badge ${actionBadgeClass(log.action)}">${actionLabel(log.action)}</span></td>
+                <td>${escHtml(log.targetType)}</td>
+                <td>${log.targetId ?? '-'}</td>
+                <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${formatDetail(log.detail)}</td>
+                <td style="font-size:12px;color:var(--text-muted)">${escHtml(log.ipAddress || '-')}</td>
+            </tr>`).join('');
+        renderPagination('auditPagination', data, page, loadAuditLogs);
+    } catch (e) {
+        document.getElementById('auditLogTableBody').innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-danger);padding:20px">加载失败: ' + escHtml(e.message) + '</td></tr>';
+    }
+}
+
+function actionLabel(action) {
+    const labels = {
+        'ADMIN_LOGIN':'管理员登录','ADMIN_LOGOUT':'管理员登出','BALANCE_UPDATE':'余额更新',
+        'ROLE_UPDATE':'角色变更','USER_STATUS':'用户状态变更','SPONSOR_APPROVE':'赞助审核通过',
+        'SPONSOR_REJECT':'赞助审核拒绝','MODEL_CREATE':'创建模型','MODEL_UPDATE':'更新模型',
+        'MODEL_DELETE':'删除模型','RULE_CREATE':'创建规则','RULE_UPDATE':'更新规则',
+        'RULE_DELETE':'删除规则','RULE_TOGGLE':'切换规则','PROMPT_DELETE':'删除提示词',
+        'PROMPT_APPROVE':'审核通过提示词','PROMPT_REJECT':'审核拒绝提示词','PROMPT_UNPUBLISH':'下架提示词',
+        'PROMPT_FEATURED':'精选状态变更'
+    };
+    return labels[action] || action;
+}
+
+function actionBadgeClass(action) {
+    if (action.startsWith('ADMIN')) return 'badge-info';
+    if (action.startsWith('MODEL') || action.startsWith('RULE')) return 'badge-warning';
+    if (action.startsWith('PROMPT')) return 'badge-secondary';
+    if (action.startsWith('SPONSOR')) return 'badge-success';
+    return 'badge-info';
+}
+
+function formatDetail(detail) {
+    if (!detail) return '-';
+    try {
+        const obj = JSON.parse(detail);
+        return Object.entries(obj).map(([k, v]) => k + ': ' + v).join(', ');
+    } catch (e) {
+        return escHtml(detail);
+    }
+}
+
+function formatTime(timeStr) {
+    if (!timeStr) return '-';
+    const d = new Date(timeStr);
+    return d.toLocaleString('zh-CN', { hour12: false });
 }
 
 // ==================== 接口测试 ====================

@@ -1,6 +1,6 @@
 package com.example.aichat.service;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.example.aichat.config.props.RagProperties;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -10,11 +10,14 @@ import java.util.regex.Pattern;
 @Service
 public class ChunkingService {
 
-    @Value("${rag.chunk.size:500}")
-    private int chunkSize;
+    private final RagProperties ragProperties;
 
-    @Value("${rag.chunk.overlap:50}")
-    private int overlap;
+    public ChunkingService(RagProperties ragProperties) {
+        this.ragProperties = ragProperties;
+    }
+
+    private int getChunkSize() { return ragProperties.getChunk().getSize(); }
+    private int getOverlap() { return ragProperties.getChunk().getOverlap(); }
 
     /**
      * 递归字符分割：\n\n → \n → 。 → ； → ，
@@ -29,13 +32,13 @@ public class ChunkingService {
         for (String sep : separators) {
             segments = splitBySeparator(segments, sep);
         }
-        return enforceMaxSize(segments, chunkSize, overlap);
+        return enforceMaxSize(segments, getChunkSize(), getOverlap());
     }
 
     private List<String> splitBySeparator(List<String> segments, String sep) {
         List<String> result = new ArrayList<>();
         for (String seg : segments) {
-            if (seg.length() <= chunkSize) {
+            if (seg.length() <= getChunkSize()) {
                 result.add(seg);
             } else {
                 for (String part : seg.split(Pattern.quote(sep))) {

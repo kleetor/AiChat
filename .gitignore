@@ -34,7 +34,6 @@ build/
 
 ### Environment ###
 .env
-.env.example
 
 ### Uploads ###
 uploads/**/*.png

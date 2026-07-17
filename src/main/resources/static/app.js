@@ -1877,7 +1877,7 @@
             lucide.createIcons();
         }
     });
-    
+
     // 加载知识库列表
     async function loadKnowledgeBases() {
         try {

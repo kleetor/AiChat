@@ -1,8 +1,9 @@
 package com.example.aichat.config;
 
+import com.example.aichat.config.props.ChromaDbProperties;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
@@ -24,15 +25,17 @@ public class ChromaDBLauncher implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(ChromaDBLauncher.class);
 
     private final RestTemplate restTemplate;
+    private final ChromaDbProperties chromaDbProperties;
     private final String chromaUrl;
     private final int chromaPort;
 
     private Process chromaProcess;
 
     public ChromaDBLauncher(RestTemplate restTemplate,
-                             @Value("${chromadb.url}") String chromaUrl) {
+                             ChromaDbProperties chromaDbProperties) {
         this.restTemplate = restTemplate;
-        this.chromaUrl = chromaUrl;
+        this.chromaDbProperties = chromaDbProperties;
+        this.chromaUrl = chromaDbProperties.getUrl();
         this.chromaPort = extractPort(chromaUrl);
     }
 

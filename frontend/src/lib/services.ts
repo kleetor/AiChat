@@ -262,6 +262,16 @@ export function sponsorCreate(file: File, amount: number): Promise<{ success: bo
   return apiPostForm("/api/billing/sponsor-create", fd);
 }
 
+// ---- Daily Checkin ----
+
+export function dailyCheckin(): Promise<{ success: boolean; amount: number; balance: number; message?: string }> {
+  return apiPost("/api/billing/checkin");
+}
+
+export function getCheckinStatus(): Promise<{ checkedIn: boolean }> {
+  return apiGet("/api/billing/checkin-status");
+}
+
 // ---- Notifications ----
 
 export function getNotifications(): Promise<Notification[]> {

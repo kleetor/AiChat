@@ -1,10 +1,11 @@
 package com.example.aichat.service;
 
 import com.example.aichat.config.BusinessException;
+import com.example.aichat.config.props.MailProperties;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -22,8 +23,11 @@ public class EmailService {
     @Autowired
     private JavaMailSender mailSender;
 
-    @Value("${spring.mail.username}")
-    private String fromEmail;
+    private final MailProperties mailProperties;
+
+    public EmailService(MailProperties mailProperties) {
+        this.mailProperties = mailProperties;
+    }
 
     private final Map<String, EmailCode> codeMap = new ConcurrentHashMap<>();
     private final Map<String, EmailCode> resetCodeMap = new ConcurrentHashMap<>();
@@ -53,7 +57,7 @@ public class EmailService {
         String code = String.format("%06d", ThreadLocalRandom.current().nextInt(1000000));
 
         SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(fromEmail);
+        message.setFrom(mailProperties.getUsername());
         message.setTo(email);
         message.setSubject("AI Chat 验证码");
         message.setText("您的验证码是：" + code + "，5分钟内有效。");
@@ -106,7 +110,7 @@ public class EmailService {
         String code = String.format("%06d", ThreadLocalRandom.current().nextInt(1000000));
 
         SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(fromEmail);
+        message.setFrom(mailProperties.getUsername());
         message.setTo(email);
         message.setSubject("AI Chat 密码重置验证码");
         message.setText("您的密码重置验证码是：" + code + "，5分钟内有效。");

@@ -1,11 +1,11 @@
 package com.example.aichat.service;
 
+import com.example.aichat.config.props.TavilyProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -20,16 +20,12 @@ public class TavilySearchService {
 
     private static final Logger logger = LoggerFactory.getLogger(TavilySearchService.class);
 
-    @Value("${tavily.api.key}")
-    private String apiKey;
-
-    @Value("${tavily.api.url:https://api.tavily.com/search}")
-    private String apiUrl;
-
+    private final TavilyProperties tavilyProperties;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
-    public TavilySearchService(RestTemplate restTemplate, ObjectMapper objectMapper) {
+    public TavilySearchService(TavilyProperties tavilyProperties, RestTemplate restTemplate, ObjectMapper objectMapper) {
+        this.tavilyProperties = tavilyProperties;
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
     }
@@ -51,13 +47,13 @@ public class TavilySearchService {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Authorization", "Bearer " + apiKey);
+        headers.set("Authorization", "Bearer " + tavilyProperties.getKey());
 
         HttpEntity<String> entity = new HttpEntity<>(requestBody.toString(), headers);
 
         try {
             ResponseEntity<String> response = restTemplate.exchange(
-                    apiUrl,
+                    tavilyProperties.getUrl(),
                     HttpMethod.POST,
                     entity,
                     String.class

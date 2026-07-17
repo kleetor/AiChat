@@ -1,9 +1,10 @@
-﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HanaChat 管理后台</title>
+    <link rel="icon" href="/HanaChat.png">
     <link rel="stylesheet" href="/theme.css">
     <link rel="stylesheet" href="/admin.css">
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -25,7 +26,7 @@
         <div class="login-brand">
             <i data-lucide="shield-check" class="login-brand-icon"></i>
             <h2>HanaChat</h2>
-            <p class="subtitle">管理后台 · 请使用管理员账号登录</p>
+            <p class="subtitle">管理后台 · 请使用管理员账号登录111</p>
         </div>
         <div id="loginError" class="error-msg"></div>
         <label>用户名</label>
@@ -78,6 +79,9 @@
             </a>
             <a data-page="apitest" onclick="switchPage('apitest', this)">
                 <i data-lucide="activity" class="nav-icon"></i> 接口测试
+            </a>
+            <a data-page="audit-logs" onclick="switchPage('audit-logs', this)">
+                <i data-lucide="scroll-text" class="nav-icon"></i> 操作日志
             </a>
         </nav>
         <div class="sidebar-footer">
@@ -353,6 +357,60 @@
                         <div class="chat-thread" id="chatDetailContent"></div>
                         <div class="modal-btns"><button class="btn btn-outline" onclick="closeChatDetail()">关闭</button></div>
                     </div>
+                </div>
+            </div>
+
+            <!-- ====== 操作日志 ====== -->
+            <div id="page-audit-logs" class="page-content" style="display:none">
+                <div class="card">
+                    <div class="card-header"><h3>操作日志</h3></div>
+                    <div class="search-bar">
+                        <div class="search-row">
+                            <input type="text" id="auditAdminId" placeholder="管理员ID（可选）" style="width:150px">
+                            <select id="auditActionFilter" style="width:180px">
+                                <option value="">所有操作类型</option>
+                                <option value="ADMIN_LOGIN">管理员登录</option>
+                                <option value="ADMIN_LOGOUT">管理员登出</option>
+                                <option value="BALANCE_UPDATE">余额更新</option>
+                                <option value="ROLE_UPDATE">角色变更</option>
+                                <option value="USER_STATUS">用户状态变更</option>
+                                <option value="SPONSOR_APPROVE">赞助审核通过</option>
+                                <option value="SPONSOR_REJECT">赞助审核拒绝</option>
+                                <option value="MODEL_CREATE">创建模型</option>
+                                <option value="MODEL_UPDATE">更新模型</option>
+                                <option value="MODEL_DELETE">删除模型</option>
+                                <option value="RULE_CREATE">创建规则</option>
+                                <option value="RULE_UPDATE">更新规则</option>
+                                <option value="RULE_DELETE">删除规则</option>
+                                <option value="RULE_TOGGLE">切换规则</option>
+                                <option value="PROMPT_DELETE">删除提示词</option>
+                                <option value="PROMPT_APPROVE">审核通过提示词</option>
+                                <option value="PROMPT_REJECT">审核拒绝提示词</option>
+                                <option value="PROMPT_UNPUBLISH">下架提示词</option>
+                                <option value="PROMPT_FEATURED">精选状态变更</option>
+                            </select>
+                            <button class="btn btn-primary" onclick="loadAuditLogs()">查询</button>
+                        </div>
+                    </div>
+                    <div style="overflow-x:auto">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width:150px">时间</th>
+                                    <th style="width:100px">管理员</th>
+                                    <th style="width:120px">操作类型</th>
+                                    <th style="width:100px">目标类型</th>
+                                    <th style="width:80px">目标ID</th>
+                                    <th>详情</th>
+                                    <th style="width:120px">IP地址</th>
+                                </tr>
+                            </thead>
+                            <tbody id="auditLogTableBody">
+                                <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px">加载中...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="auditPagination" class="pagination"></div>
                 </div>
             </div>
 

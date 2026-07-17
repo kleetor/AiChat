@@ -50,6 +50,7 @@ public class FlywayConfig {
                 .locations(locations)
                 .baselineOnMigrate(baselineOnMigrate)
                 .baselineVersion(baselineVersion)
+                .outOfOrder(true)
                 .load();
 
         MigrationInfoService info = flyway.info();

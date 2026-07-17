@@ -78,6 +78,7 @@ export default function App() {
       loadPrompts(),
       loadKBList(),
       billing.loadBilling(),
+      billing.loadCheckinStatus(),
       notif.loadNotifications(),
       notif.loadUnreadCount(),
       friends.loadFriends(),
@@ -321,6 +322,11 @@ export default function App() {
             const msg = e instanceof Error ? e.message : "提交失败";
             alert(msg);
           }
+        }}
+        checkedIn={billing.checkedIn}
+        onCheckin={async () => {
+          await billing.checkin();
+          billing.loadBilling();
         }}
       />
 

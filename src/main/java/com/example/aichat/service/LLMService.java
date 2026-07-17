@@ -1,6 +1,6 @@
 package com.example.aichat.service;
 
-import com.example.aichat.config.MemoryLLMConfig;
+import com.example.aichat.config.props.MemoryProperties;
 import com.example.aichat.model.ModelConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,15 +29,15 @@ public class LLMService {
 
     private final RestTemplate restTemplate;
     private final ThreadPoolTaskExecutor chatExecutorService;
-    private final MemoryLLMConfig memoryLLMConfig;
+    private final MemoryProperties memoryProperties;
     private final ObjectMapper objectMapper;
 
     public LLMService(RestTemplate restTemplate,
                       ThreadPoolTaskExecutor chatExecutorService,
-                      MemoryLLMConfig memoryLLMConfig) {
+                      MemoryProperties memoryProperties) {
         this.restTemplate = restTemplate;
         this.chatExecutorService = chatExecutorService;
-        this.memoryLLMConfig = memoryLLMConfig;
+        this.memoryProperties = memoryProperties;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -96,15 +96,15 @@ public class LLMService {
     }
 
     /**
-     * 同步调用 LLM (使用 MemoryLLMConfig 环境变量配置)。
+     * 同步调用 LLM (使用 MemoryProperties 中 llm 配置)。
      * 供记忆提取、摘要生成、阶梯压缩等内部场景使用。
      * 使用独立线程池避免与 chatExecutorService 死锁。
      */
     public String chatSync(String prompt) {
         ModelConfig config = new ModelConfig();
-        config.setApiKey(memoryLLMConfig.getApiKey());
-        config.setApiUrl(memoryLLMConfig.getApiUrl());
-        config.setModelName(memoryLLMConfig.getModelName());
+        config.setApiKey(memoryProperties.getLlm().getApiKey());
+        config.setApiUrl(memoryProperties.getLlm().getApiUrl());
+        config.setModelName(memoryProperties.getLlm().getModelName());
 
         ArrayNode messages = objectMapper.createArrayNode();
         ObjectNode userNode = messages.addObject();

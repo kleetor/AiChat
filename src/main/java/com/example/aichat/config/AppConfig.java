@@ -1,5 +1,6 @@
 package com.example.aichat.config;
 
+import com.example.aichat.config.props.EncryptionProperties;
 import com.example.aichat.util.AESUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
@@ -10,7 +11,6 @@ import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.apache.hc.core5.util.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -24,11 +24,15 @@ public class AppConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(AppConfig.class);
 
-    @Value("${encryption.key}")
-    private String encryptionKey;
+    private final EncryptionProperties encryptionProperties;
+
+    public AppConfig(EncryptionProperties encryptionProperties) {
+        this.encryptionProperties = encryptionProperties;
+    }
 
     @PostConstruct
     public void initEncryptionKey() {
+        String encryptionKey = encryptionProperties.getKey();
         if (encryptionKey == null || encryptionKey.isBlank()) {
             logger.error("ENCRYPTION_KEY 环境变量未设置，应用无法启动");
             throw new IllegalStateException("ENCRYPTION_KEY 环境变量未设置，请设置后重启");

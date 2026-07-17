@@ -39,6 +39,7 @@ public class SecurityConfig {
                                 "/api/auth/send-reset-code", "/api/auth/reset-password").permitAll()
                         .requestMatchers("/api/admin/login").permitAll()
                         .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers("/favicon.ico").permitAll()
                         .requestMatchers("/**/*.css", "/**/*.js", "/**/*.png", "/**/*.svg", "/**/*.ico").permitAll()
                         .requestMatchers("/uploads/**").permitAll()
                         .anyRequest().authenticated()
@@ -48,6 +49,29 @@ public class SecurityConfig {
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .securityContext(securityContext -> securityContext.requireExplicitSave(false))
+                // ========== 安全响应头 ==========
+                .headers(headers -> headers
+                        // 点击劫持防护
+                        .frameOptions(frame -> frame.deny())
+                        // 内容类型嗅探防护
+                        .contentTypeOptions(contentTypeOptions -> {})
+                        // 强制 HTTPS（生产环境启用）
+                        .httpStrictTransportSecurity(hsts -> hsts
+                                .maxAgeInSeconds(31536000)
+                                .includeSubDomains(true))
+                        // XSS 防护（关闭浏览器过时 Auditor，由 CSP 接管）
+                        .xssProtection(xss -> xss.disable())
+                        // 内容安全策略
+                        .contentSecurityPolicy(csp -> csp
+                                .policyDirectives(
+                                        "default-src 'self'; " +
+                                        "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; " +
+                                        "style-src 'self' 'unsafe-inline'; " +
+                                        "img-src 'self' data: blob: https:; " +
+                                        "font-src 'self'; " +
+                                        "connect-src 'self' https:; " +
+                                        "frame-ancestors 'none'"))
+                )
         ;
         return http.build();
     }

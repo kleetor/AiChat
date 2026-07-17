@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -58,4 +59,7 @@ public class User {
     @Column(name = "created_at", nullable = false, columnDefinition = "DATETIME")
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(name = "last_checkin_date", columnDefinition = "DATE")
+    private LocalDate lastCheckinDate;
 }

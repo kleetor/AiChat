@@ -1,12 +1,13 @@
 package com.example.aichat.service;
 
+import com.example.aichat.config.props.ImageProperties;
+import com.example.aichat.config.props.S3Properties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -29,49 +30,32 @@ public class ImageService {
 
     private static final Logger logger = LoggerFactory.getLogger(ImageService.class);
 
-    @Value("${s3.endpoint}")
-    private String s3Endpoint;
-
-    @Value("${s3.access-key}")
-    private String s3AccessKey;
-
-    @Value("${s3.secret-key}")
-    private String s3SecretKey;
-
-    @Value("${s3.bucket-name}")
-    private String s3BucketName;
-
-    @Value("${s3.url-prefix}")
-    private String s3UrlPrefix;
-
-    @Value("${s3.region}")
-    private String s3Region;
-
-    @Value("${image.model}")
-    private String imageModel;
-
-    @Value("${image.api.key}")
-    private String imageApiKey;
-
-    @Value("${image.api.url}")
-    private String imageApiUrl;
+    private final S3Properties s3Properties;
+    private final ImageProperties imageProperties;
 
     private S3Client s3Client;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
+    public ImageService(S3Properties s3Properties, ImageProperties imageProperties) {
+        this.s3Properties = s3Properties;
+        this.imageProperties = imageProperties;
+    }
+
     @PostConstruct
     public void init() {
-        AwsBasicCredentials credentials = AwsBasicCredentials.create(s3AccessKey, s3SecretKey);
+        AwsBasicCredentials credentials = AwsBasicCredentials.create(
+                s3Properties.getAccessKey(), s3Properties.getSecretKey());
         this.s3Client = S3Client.builder()
-                .endpointOverride(URI.create(s3Endpoint))
-                .region(Region.of(s3Region))
+                .endpointOverride(URI.create(s3Properties.getEndpoint()))
+                .region(Region.of(s3Properties.getRegion()))
                 .credentialsProvider(StaticCredentialsProvider.create(credentials))
                 .serviceConfiguration(S3Configuration.builder()
                         .pathStyleAccessEnabled(true)
                         .build())
                 .build();
-        logger.info("S3客户端初始化完成，端点: {}, 存储桶: {}", s3Endpoint, s3BucketName);
+        logger.info("S3客户端初始化完成，端点: {}, 存储桶: {}",
+                s3Properties.getEndpoint(), s3Properties.getBucketName());
     }
 
     /**
@@ -86,7 +70,7 @@ public class ImageService {
         String fileName = UUID.randomUUID().toString() + extension;
 
         PutObjectRequest putRequest = PutObjectRequest.builder()
-                .bucket(s3BucketName)
+                .bucket(s3Properties.getBucketName())
                 .key(fileName)
                 .contentType(file.getContentType())
                 .build();
@@ -94,7 +78,7 @@ public class ImageService {
         s3Client.putObject(putRequest,
                 RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
 
-        String imageUrl = s3UrlPrefix + "/" + fileName;
+        String imageUrl = s3Properties.getUrlPrefix() + "/" + fileName;
         logger.info("图片上传成功: {}", imageUrl);
         return imageUrl;
     }
@@ -104,7 +88,7 @@ public class ImageService {
      */
     public String recognizeImage(String imageUrl) throws Exception {
         ObjectNode requestBody = objectMapper.createObjectNode();
-        requestBody.put("model", imageModel);
+        requestBody.put("model", imageProperties.getModel());
 
         ArrayNode messagesArray = objectMapper.createArrayNode();
 
@@ -138,8 +122,8 @@ public class ImageService {
         logger.debug("图片识别请求: {}", jsonBody);
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(imageApiUrl))
-                .header("Authorization", "Bearer " + imageApiKey)
+                .uri(URI.create(imageProperties.getApiUrl()))
+                .header("Authorization", "Bearer " + imageProperties.getApiKey())
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody))

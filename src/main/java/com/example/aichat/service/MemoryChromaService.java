@@ -1,6 +1,6 @@
 package com.example.aichat.service;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.example.aichat.config.props.ChromaDbProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -16,8 +16,8 @@ public class MemoryChromaService extends BaseChromaDBService<Long> {
 
     public MemoryChromaService(RestTemplate restTemplate,
                                SiliconFlowEmbeddingService embeddingService,
-                               @Value("${chromadb.url}") String chromaUrl) {
-        super(restTemplate, embeddingService, chromaUrl);
+                               ChromaDbProperties chromaDbProperties) {
+        super(restTemplate, embeddingService, chromaDbProperties.getUrl());
     }
 
     @Override
