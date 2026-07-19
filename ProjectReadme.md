@@ -305,14 +305,14 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    A["1. 系统规则 (管理员可配置)"] --> B["2. 用户自定义 Prompt"]
-    B --> C["3. 长期记忆 (最近 N 条)"]
-    C --> D["4. 对话摘要 (20 条消息触发自动生成)"]
-    D --> E["5. 知识库 RAG 检索 (ChromaDB 语义搜索 Top-K)"]
-    E --> F["6. 历史对话 (最近 30 条)"]
-    F --> G["7. 联网搜索结果 (Tavily → 百度千帆 降级)"]
-    G --> H["8. 图片识别描述 (视觉模型预处理)"]
-    H --> I["9. 当前用户消息"]
+    A["[1] 系统规则 (管理员可配置)"] --> B["[2] 用户自定义 Prompt"]
+    B --> C["[3] 长期记忆 (最近 N 条)"]
+    C --> D["[4] 对话摘要 (20 条消息触发自动生成)"]
+    D --> E["[5] 知识库 RAG 检索 (ChromaDB 语义搜索 Top-K)"]
+    E --> F["[6] 历史对话 (最近 30 条)"]
+    F --> G["[7] 联网搜索结果 (Tavily → 百度千帆 降级)"]
+    G --> H["[8] 图片识别描述 (视觉模型预处理)"]
+    H --> I["[9] 当前用户消息"]
 ```
 
 ### 4.4 知识库 RAG
@@ -375,67 +375,20 @@ flowchart TB
 独立的后台管理面板，为平台运营者提供完整的系统管理能力。
 
 ```mermaid
-flowchart TB
-    subgraph dash["仪表盘"]
-        direction TB
-        D1["总览统计"]
-        D2["图表分析"]
-        D3["收入统计"]
-        D4["活跃趋势"]
+flowchart TD
+    subgraph row1[" "]
+        direction LR
+        A["<b>仪表盘</b><br/>总览统计 | 图表分析<br/>收入统计 | 活跃趋势"]
+        B["<b>用户管理</b><br/>用户列表 | 余额调整<br/>角色切换 | 启用/禁用"]
+        C["<b>提示词审核</b><br/>待审核队列 | 审核通过/拒绝<br/>精选推荐 | 强制下架"]
+        D["<b>模型配置</b><br/>新增模型 | Token 定价<br/>API Key 加密存储"]
     end
-
-    subgraph user["用户管理"]
-        direction TB
-        U1["用户列表"]
-        U2["余额调整"]
-        U3["角色切换"]
-        U4["启用/禁用"]
-    end
-
-    subgraph prompt["提示词审核"]
-        direction TB
-        P1["待审核队列"]
-        P2["审核通过/拒绝"]
-        P3["精选推荐管理"]
-        P4["强制下架"]
-    end
-
-    subgraph model["模型配置"]
-        direction TB
-        M1["新增模型"]
-        M2["API Key 加密存储"]
-        M3["Token 定价配置"]
-    end
-
-    subgraph rule["系统规则"]
-        direction TB
-        R1["规则列表"]
-        R2["启用/禁用"]
-        R3["排序调整"]
-        R4["全局注入对话上下文"]
-    end
-
-    subgraph sponsor["赞助审核"]
-        direction TB
-        SP1["充值订单审核"]
-        SP2["通过/拒绝"]
-        SP3["自动发放 Token"]
-    end
-
-    subgraph conversation["对话与用量"]
-        direction TB
-        CV1["所有对话记录查看"]
-        CV2["消息详情追溯"]
-        CV3["Token 用量统计"]
-        CV4["收入统计分析"]
-    end
-
-    subgraph security["安全管理"]
-        direction TB
-        SE1["独立 JWT 认证"]
-        SE2["ROLE_ADMIN 角色隔离"]
-        SE3["登录限流 (3次/分钟)"]
-        SE4["Token 黑名单"]
+    subgraph row2[" "]
+        direction LR
+        E["<b>系统规则</b><br/>规则列表 | 启用/禁用<br/>排序调整 | 全局注入上下文"]
+        F["<b>赞助审核</b><br/>订单审核 | 通过/拒绝<br/>自动发放 Token"]
+        G["<b>对话与用量</b><br/>对话记录 | 消息追溯<br/>Token 统计 | 收入分析"]
+        H["<b>安全管理</b><br/>独立 JWT | 角色隔离<br/>登录限流 | Token 黑名单"]
     end
 ```
 
@@ -604,27 +557,12 @@ flowchart TD
 ### 5.3 健康检查与指标监控
 
 ```mermaid
-flowchart TB
-    subgraph health["容器健康检查"]
-        direction TB
-        H1["Docker HEALTHCHECK"]
-        H2["curl /actuator/health"]
-        H3["interval=30s timeout=5s retries=3"]
-    end
-
-    subgraph cache["缓存指标 (Caffeine recordStats)"]
-        direction TB
-        CA1["7 个命名缓存均启用命中率统计"]
-        CA2["modelConfigs / promptsByUser"]
-        CA3["kbList / kbDocs"]
-        CA4["billingBalance / Spent / Tokens"]
-    end
-
-    subgraph rate["速率限制响应头"]
-        direction TB
-        R1["X-RateLimit-Remaining"]
-        R2["X-RateLimit-Reset"]
-        R3["X-RateLimit-Limit"]
+flowchart TD
+    subgraph row[" "]
+        direction LR
+        A["<b>容器健康检查</b><br/>Docker HEALTHCHECK<br/>curl /actuator/health<br/>interval=30s / timeout=5s / retries=3"]
+        B["<b>缓存指标</b><br/>Caffeine recordStats<br/>7 个命名缓存启用命中率统计<br/>modelConfigs / promptsByUser<br/>kbList / kbDocs / billing*"]
+        C["<b>速率限制响应头</b><br/>X-RateLimit-Remaining<br/>X-RateLimit-Reset<br/>X-RateLimit-Limit"]
     end
 ```
 
