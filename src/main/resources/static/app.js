@@ -1,8 +1,8 @@
 
     // ======== 全局状态 ========
     const API = ''; // 同源
-    let token = sessionStorage.getItem('chat_token') || '';
-    let username = sessionStorage.getItem('chat_username') || '';
+    let token = ChatCommon.Auth.getToken();
+    let username = ChatCommon.Auth.getUsername();
     let currentConvId = null;          // 当前选中的会话ID
     let currentPromptId = null;        // 当前选中的提示词ID
     let currentModelConfigId = null;   // 当前选中的模型配置ID
@@ -161,7 +161,7 @@
     // ======== UI 状态 ========
     function showLoggedIn(name) {
         username = name;
-        sessionStorage.setItem('chat_username', name);
+        ChatCommon.Auth.setUsername(name);
         userDisplay.textContent = `${name}`;
         btnLogin.style.display = 'none';
         btnLogout.style.display = 'inline-block';
@@ -199,8 +199,7 @@
 
     function showLoggedOut() {
         username = '';
-        sessionStorage.removeItem('chat_username');
-        sessionStorage.removeItem('chat_token');
+        ChatCommon.Auth.clear();
         localStorage.removeItem('current_prompt_id');
         localStorage.removeItem('current_model_config_id');
         token = '';
@@ -458,12 +457,12 @@
                     return;
                 }
                 token = data.token;
-                username = data.username;
-                sessionStorage.setItem('chat_token', token);
-                sessionStorage.setItem('chat_username', username);
-                showLoggedIn(username);
-                closeAuthModal();
-                loadConversations();
+            username = data.username;
+            ChatCommon.Auth.setToken(data.token);
+            ChatCommon.Auth.setUsername(data.username);
+            showLoggedIn(username);
+            closeAuthModal();
+            loadConversations();
                 loadPromptsSilent();
                 loadModelsSilent();
             } catch (e) {
@@ -489,8 +488,8 @@
                 token = data.token;
                 username = data.username;
                 const balance = data.balance || 0;
-                sessionStorage.setItem('chat_token', token);
-                sessionStorage.setItem('chat_username', username);
+                ChatCommon.Auth.setToken(data.token);
+                ChatCommon.Auth.setUsername(data.username);
                 showLoggedIn(username);
                 closeAuthModal();
                 loadConversations();
@@ -518,8 +517,7 @@
 
     function logout() {
         token = '';
-        sessionStorage.removeItem('chat_token');
-        sessionStorage.removeItem('chat_username');
+        ChatCommon.Auth.clear();
         localStorage.removeItem('current_prompt_id');
         localStorage.removeItem('current_model_config_id');
         showLoggedOut();

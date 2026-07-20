@@ -1,20 +1,40 @@
 const TOKEN_KEY = "chat_token";
+const REMEMBER_KEY = "chat_remember";
 
 /**
- * Token 存储策略：使用 sessionStorage 替代 localStorage。
- * sessionStorage 仅在当前标签页有效，关闭标签页即清除，减少持久化攻击面。
- * 理想方案是后端使用 httpOnly cookie，此处为前后端分离折中方案。
+ * Token 存储策略：根据用户"记住我"选择决定使用 localStorage（持久）还是 sessionStorage（临
+ * 时）。
+ * - 勾选"记住我"：localStorage，关闭窗口后 Token 保留，JWT 有效期内自动登录
+ * - 不勾选：sessionStorage，关闭窗口即清除，与原行为一致
  */
+function isRememberMe(): boolean {
+  return localStorage.getItem(REMEMBER_KEY) === "true";
+}
+
+function getStorage(): Storage {
+  return isRememberMe() ? localStorage : sessionStorage;
+}
+
 export function getToken(): string | null {
-  return sessionStorage.getItem(TOKEN_KEY);
+  // 优先从当前模式读取，回退到另一个 Storage（兼容登录时双写）
+  const token = getStorage().getItem(TOKEN_KEY);
+  if (token) return token;
+  const other = isRememberMe() ? sessionStorage : localStorage;
+  return other.getItem(TOKEN_KEY);
 }
 
 export function setToken(token: string): void {
-  sessionStorage.setItem(TOKEN_KEY, token);
+  // 双写：保证登录后两种模式都能读到 Token
+  getStorage().setItem(TOKEN_KEY, token);
+  const other = isRememberMe() ? sessionStorage : localStorage;
+  other.setItem(TOKEN_KEY, token);
 }
 
 export function clearToken(): void {
+  // 登出时同时清理两种存储，确保无残留
+  localStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REMEMBER_KEY);
 }
 
 export class ApiError extends Error {

@@ -1,6 +1,6 @@
 const API = '';
-let token = sessionStorage.getItem('chat_token') || '';
-let username = sessionStorage.getItem('chat_username') || '';
+let token = ChatCommon.Auth.getToken();
+let username = ChatCommon.Auth.getUsername();
 let currentPrompt = null;
 let currentSort = 'likes';
 let currentSearch = '';
@@ -835,8 +835,7 @@ downloadBtn.addEventListener('click', async () => {
 btnLogout.addEventListener('click', logout);
 function logout() {
     token = '';
-    sessionStorage.removeItem('chat_token');
-    sessionStorage.removeItem('chat_username');
+    ChatCommon.Auth.clear();
     window.location.href = '/';
 }
 btnBack.addEventListener('click', () => { window.location.href = '/'; });

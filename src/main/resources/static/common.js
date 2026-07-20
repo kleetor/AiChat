@@ -6,28 +6,68 @@
 ; (function (global) {
   'use strict';
 
-  // ======== 认证管理 (使用 sessionStorage 与 React SPA 保持一致) ========
+  // ======== 认证管理 (支持 localStorage 持久登录 + sessionStorage 临时会话) ========
   const Auth = {
     TOKEN_KEY: 'chat_token',
     USERNAME_KEY: 'chat_username',
+    REMEMBER_KEY: 'chat_remember',
+
+    // 判断当前是否使用 localStorage（用户勾选了"记住我"）
+    _useLocal: function () {
+      return localStorage.getItem(this.REMEMBER_KEY) === 'true';
+    },
+
+    // 获取当前应使用的 Storage
+    _storage: function () {
+      return this._useLocal() ? localStorage : sessionStorage;
+    },
 
     getToken: function () {
-      return sessionStorage.getItem(this.TOKEN_KEY) || '';
+      // 优先从当前模式读取，回退到另一个 Storage（兼容登录时双写）
+      var token = this._storage().getItem(this.TOKEN_KEY);
+      if (token) return token;
+      var other = this._useLocal() ? sessionStorage : localStorage;
+      return other.getItem(this.TOKEN_KEY) || '';
     },
 
     setToken: function (token) {
-      sessionStorage.setItem(this.TOKEN_KEY, token);
+      this._storage().setItem(this.TOKEN_KEY, token);
+      // 双写：保证登录后两种模式都能读到 Token
+      var other = this._useLocal() ? sessionStorage : localStorage;
+      other.setItem(this.TOKEN_KEY, token);
+    },
+
+    setRemember: function (remember) {
+      if (remember) {
+        localStorage.setItem(this.REMEMBER_KEY, 'true');
+        // 将 sessionStorage 中的 Token 迁移到 localStorage
+        var sessToken = sessionStorage.getItem(this.TOKEN_KEY);
+        var sessUser = sessionStorage.getItem(this.USERNAME_KEY);
+        if (sessToken) localStorage.setItem(this.TOKEN_KEY, sessToken);
+        if (sessUser) localStorage.setItem(this.USERNAME_KEY, sessUser);
+      } else {
+        localStorage.removeItem(this.REMEMBER_KEY);
+      }
     },
 
     getUsername: function () {
-      return sessionStorage.getItem(this.USERNAME_KEY) || '';
+      var name = this._storage().getItem(this.USERNAME_KEY);
+      if (name) return name;
+      var other = this._useLocal() ? sessionStorage : localStorage;
+      return other.getItem(this.USERNAME_KEY) || '';
     },
 
     setUsername: function (name) {
-      sessionStorage.setItem(this.USERNAME_KEY, name);
+      this._storage().setItem(this.USERNAME_KEY, name);
+      var other = this._useLocal() ? sessionStorage : localStorage;
+      other.setItem(this.USERNAME_KEY, name);
     },
 
     clear: function () {
+      // 登出时同时清理两种存储，确保无残留
+      localStorage.removeItem(this.TOKEN_KEY);
+      localStorage.removeItem(this.USERNAME_KEY);
+      localStorage.removeItem(this.REMEMBER_KEY);
       sessionStorage.removeItem(this.TOKEN_KEY);
       sessionStorage.removeItem(this.USERNAME_KEY);
     },
@@ -54,7 +94,8 @@
 
     return function (url, opts) {
       opts = opts || {};
-      var token = sessionStorage.getItem(tokenKey) || '';
+      // 统一通过 Auth 模块获取 Token（支持 localStorage/sessionStorage 双模式）
+      var token = Auth.getToken();
       var headers = {};
       // 复制自定义 headers
       if (opts.headers) {
@@ -79,7 +120,7 @@
         body: body
       }).then(function (res) {
         if (res.status === 401) {
-          sessionStorage.removeItem(tokenKey);
+          Auth.clear();
           window.location.href = redirectOn401;
           return null;
         }

@@ -75,6 +75,8 @@
         return res.json();
       })
       .then(function (data) {
+        var remember = document.getElementById('loginRemember').checked;
+        ChatCommon.Auth.setRemember(remember);
         ChatCommon.Auth.setToken(data.token);
         ChatCommon.Auth.setUsername(data.username);
         window.location.href = '/';
