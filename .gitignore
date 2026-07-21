@@ -36,4 +36,10 @@ build/
 .env
 
 ### Uploads ###
-uploads/**/*.png
+uploads/
+
+### ChromaDB ###
+chroma_data/
+
+### Temp files ###
+query
