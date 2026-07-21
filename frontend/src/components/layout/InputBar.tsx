@@ -1,5 +1,5 @@
 import { useRef, useEffect } from "react";
-import { Send, Image, StopCircle, Loader2, CheckCircle2, X } from "lucide-react";
+import { Send, Image, Paperclip, StopCircle, Loader2, CheckCircle2, X } from "lucide-react";
 import WebSearchToggle from "@/components/shared/WebSearchToggle";
 
 interface InputBarProps {
@@ -9,9 +9,13 @@ interface InputBarProps {
   onStop?: () => void;
   onImageUpload?: (file: File) => void;
   onClearImage?: () => void;
+  onFileUpload?: (file: File) => void;
+  onClearFile?: () => void;
   isGenerating?: boolean;
   imageUploading?: boolean;
   imagePreview?: string | null;
+  fileUploading?: boolean;
+  fileName?: string | null;
   maxLength?: number;
   disabled?: boolean;
   placeholder?: string;
@@ -26,9 +30,13 @@ export default function InputBar({
   onStop,
   onImageUpload,
   onClearImage,
+  onFileUpload,
+  onClearFile,
   isGenerating = false,
   imageUploading = false,
   imagePreview = null,
+  fileUploading = false,
+  fileName = null,
   maxLength = 4000,
   disabled = false,
   placeholder = "向 AI 提问，或输入 / 使用指令...",
@@ -37,6 +45,7 @@ export default function InputBar({
 }: InputBarProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -52,12 +61,24 @@ export default function InputBar({
     fileInputRef.current?.click();
   };
 
+  const handleFileClick = () => {
+    docInputRef.current?.click();
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && onImageUpload) {
       onImageUpload(file);
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleDocChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onFileUpload) {
+      onFileUpload(file);
+    }
+    if (docInputRef.current) docInputRef.current.value = "";
   };
 
   return (
@@ -77,11 +98,26 @@ export default function InputBar({
             {imageUploading ? "正在分析图片..." : "图片处理完成，识别结果将随消息发送"}
           </span>
           {onClearImage && (
-            <button
-              onClick={onClearImage}
-              className="p-0.5 rounded hover:bg-emerald-100 transition-colors"
-              title="清除图片"
-            >
+            <button onClick={onClearImage} className="p-0.5 rounded hover:bg-emerald-100 transition-colors" title="清除图片">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* File upload bar */}
+      {(fileName || fileUploading) && (
+        <div className="max-w-3xl mx-auto mb-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-800">
+          {fileUploading ? (
+            <Loader2 size={14} className="animate-spin shrink-0 text-blue-600" />
+          ) : (
+            <CheckCircle2 size={14} className="shrink-0 text-blue-600" />
+          )}
+          <span className="flex-1 text-xs">
+            {fileUploading ? "正在上传文件..." : `文件已上传：${fileName}`}
+          </span>
+          {onClearFile && (
+            <button onClick={onClearFile} className="p-0.5 rounded hover:bg-blue-100 transition-colors" title="清除文件">
               <X size={14} />
             </button>
           )}
@@ -128,12 +164,31 @@ export default function InputBar({
               Shift+Enter 换行
             </span>
 
-            {/* Image upload button */}
+            {/* File upload button (工具调用路径) */}
+            {onFileUpload && (
+              <button
+                onClick={handleFileClick}
+                disabled={disabled || fileUploading}
+                className="flex items-center justify-center w-7 h-7 rounded-lg transition-all duration-150 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+                title="上传文件"
+              >
+                <Paperclip size={14} />
+              </button>
+            )}
+            <input
+              ref={docInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleDocChange}
+            />
+
+            {/* Image upload button (旧路径，保留但隐藏) */}
             {onImageUpload && (
               <button
                 onClick={handleImageClick}
                 disabled={disabled || imageUploading}
-                className="flex items-center justify-center w-7 h-7 rounded-lg transition-all duration-150 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+                className="hidden"
                 title="上传图片"
               >
                 <Image size={14} />

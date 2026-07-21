@@ -44,9 +44,13 @@ public class ModelConfig {
     @Builder.Default
     private BigDecimal inputTokenPrice = new BigDecimal("0.001000");
 
-    @NotNull(message = "输出价格不能为空")
+    @NotNull(message = "输出价格不能为负数")
     @DecimalMin(value = "0", message = "输出价格不能为负数")
     @Column(nullable = false, precision = 12, scale = 6)
     @Builder.Default
     private BigDecimal outputTokenPrice = new BigDecimal("0.002000");
+
+    @Column(name = "supports_tool_calling")
+    @Builder.Default
+    private Boolean supportsToolCalling = false;
 }

@@ -143,6 +143,14 @@ public class ImageService {
     }
 
     /**
+     * 仅上传文件到 S3，不做识别。返回图片 URL。
+     * 供工具调用路径使用（识别由 analyze_image 工具在 LLM 调用时执行）。
+     */
+    public String uploadFileOnly(MultipartFile file) throws Exception {
+        return uploadImage(file);
+    }
+
+    /**
      * 上传图片并识别，返回图片URL和描述
      */
     public ImageUploadResult uploadAndRecognize(MultipartFile file) throws Exception {
@@ -153,9 +161,9 @@ public class ImageService {
     }
 
     /**
-     * 将图片描述格式化为伪装消息，让主聊天模型识别为图片描述而非用户原始输入
+     * 将图片描述格式化为系统提示消息格式。
      */
-    private String formatImageDescription(String imageUrl, String description) {
+    public String formatImageDescription(String imageUrl, String description) {
         return "[系统提示：用户上传了一张图片，以下是AI视觉模型对该图片的识别描述，"
                 + "请将此描述作为用户上传图片的内容来理解和回应]\n"
                 + "图片URL: " + imageUrl + "\n"

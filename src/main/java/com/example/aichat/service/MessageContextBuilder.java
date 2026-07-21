@@ -13,7 +13,6 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -21,7 +20,7 @@ import java.util.stream.Collectors;
 
 /**
  * 消息上下文构建器 —— 从 ChatService 拆分，负责构建 LLM API 的 messages 数组。
- * 按顺序拼接：系统规则 → 自定义提示词 → 长期记忆 → 对话摘要 → 知识库检索 → 历史对话 → 联网搜索 → 图片描述 → 当前消息
+ * 按顺序拼接：系统规则 → 自定义提示词 → 长期记忆 → 对话摘要 → 知识库检索 → 历史对话 → 图片引用/描述 → 当前消息
  */
 @Component
 public class MessageContextBuilder {
@@ -34,8 +33,6 @@ public class MessageContextBuilder {
     private final MemoryService memoryService;
     private final ConversationSummaryRepository summaryRepo;
     private final ChromaDBService chromaDBService;
-    private final TavilySearchService tavilySearchService;
-    private final SearchService searchService;
     private final SystemRuleRepository systemRuleRepository;
     private final ObjectMapper objectMapper;
 
@@ -44,27 +41,28 @@ public class MessageContextBuilder {
                                   MemoryService memoryService,
                                   ConversationSummaryRepository summaryRepo,
                                   ChromaDBService chromaDBService,
-                                  TavilySearchService tavilySearchService,
-                                  SearchService searchService,
                                   SystemRuleRepository systemRuleRepository) {
         this.chatMessageRepository = chatMessageRepository;
         this.promptService = promptService;
         this.memoryService = memoryService;
         this.summaryRepo = summaryRepo;
         this.chromaDBService = chromaDBService;
-        this.tavilySearchService = tavilySearchService;
-        this.searchService = searchService;
         this.systemRuleRepository = systemRuleRepository;
         this.objectMapper = new ObjectMapper();
     }
 
     /**
-     * 构建消息数组（含 prompt、长期记忆、知识库、摘要、历史、搜索、图片、当前消息）
+     * 构建消息数组（含 prompt、长期记忆、知识库、摘要、历史、图片引用、当前消息）。
+     *
+     * 搜索结果不再在此处注入，改为由 ChatService 根据 modelConfig.supportsToolCalling 决定：
+     * - 支持工具调用：通过 tools 参数激活 search_web，LLM 自主决定调用
+     * - 不支持工具调用：ChatService 预先调搜索 API，作为 system 消息注入
      */
     public ArrayNode buildMessagesArray(Long conversationId, Long promptId,
                                          String userMessage, boolean webSearchEnabled,
                                          String imageDescription, Long knowledgeBaseId,
-                                         Long userId, Boolean longMemoryEnabled) {
+                                         Long userId, Boolean longMemoryEnabled,
+                                         String imageUrl, String fileUrl) {
         ArrayNode messagesArray = objectMapper.createArrayNode();
         List<ChatMessage> history = getRecentHistory(conversationId);
 
@@ -169,32 +167,27 @@ public class MessageContextBuilder {
             assistantNode.put("content", msg.getAiReply());
         }
 
-        // 添加联网搜索结果（优先使用 Tavily，失败后回退到百度千帆）
-        if (webSearchEnabled) {
-            try {
-                String searchResults = tavilySearchService.searchAsMarkdown(userMessage, 5);
-                ObjectNode searchContextNode = messagesArray.addObject();
-                searchContextNode.put("role", "system");
-                searchContextNode.put("content", "最新搜索信息（Tavily）：\n" + searchResults);
-                logger.info("联网搜索(Tavily)成功，查询: {}", userMessage);
-            } catch (Exception e) {
-                logger.warn("Tavily 搜索失败，回退到百度千帆: {}", e.getMessage());
-                try {
-                    String searchResults = searchService.searchAsMarkdown(userMessage, 5);
-                    ObjectNode searchContextNode = messagesArray.addObject();
-                    searchContextNode.put("role", "system");
-                    searchContextNode.put("content", "最新搜索信息：\n" + searchResults);
-                } catch (Exception e2) {
-                    logger.warn("百度千帆搜索也失败: {}", e2.getMessage());
-                }
-            }
-        }
+        // 联网搜索结果不再在此处注入，由 ChatService 处理工具调用逻辑
+        // 保留参数 webSearchEnabled 供调用方参考
 
-        // 添加图片识别描述
-        if (imageDescription != null && !imageDescription.isBlank()) {
+        // 添加图片引用（工具调用路径）或图片描述（旧路径兼容）
+        if (imageUrl != null && !imageUrl.isBlank()) {
+            ObjectNode imageRefNode = messagesArray.addObject();
+            imageRefNode.put("role", "system");
+            imageRefNode.put("content", "用户上传了一张图片，URL: " + imageUrl
+                    + "\n如需分析这张图片，请使用 analyze_image 工具。");
+        } else if (imageDescription != null && !imageDescription.isBlank()) {
             ObjectNode imageContextNode = messagesArray.addObject();
             imageContextNode.put("role", "system");
             imageContextNode.put("content", imageDescription);
+        }
+
+        // 添加文件引用（工具调用路径，供未来扩展更多文件类型工具）
+        if (fileUrl != null && !fileUrl.isBlank()) {
+            ObjectNode fileRefNode = messagesArray.addObject();
+            fileRefNode.put("role", "system");
+            fileRefNode.put("content", "用户上传了一个文件，URL: " + fileUrl
+                    + "\n请根据文件类型使用相应的工具进行分析。如果是图片，请使用 analyze_image 工具。");
         }
 
         // 添加当前用户消息

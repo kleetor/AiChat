@@ -51,6 +51,7 @@ export function useChat(onError?: (msg: string) => void) {
       content: inputContent,
       createdAt: new Date().toISOString(),
       isLocal: true,
+      fileUrl: req.fileUrl,
     };
     setMessages(prev => [...prev, userMsg]);
     setIsGenerating(true);

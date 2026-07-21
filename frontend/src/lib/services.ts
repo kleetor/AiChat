@@ -16,6 +16,7 @@ export interface ChatMessage {
   content: string;
   createdAt?: string;
   isLocal?: boolean;
+  fileUrl?: string | null;
 }
 
 export interface ChatRequest {
@@ -24,6 +25,8 @@ export interface ChatRequest {
   modelConfigId?: number | null;
   webSearchEnabled?: boolean;
   imageDescription?: string | null;
+  imageUrl?: string | null;
+  fileUrl?: string | null;
   knowledgeBaseId?: number | null;
   longMemoryEnabled?: boolean;
 }
@@ -195,6 +198,12 @@ export function uploadImage(file: File): Promise<{ imageUrl: string; description
   const fd = new FormData();
   fd.append("file", file);
   return apiPostForm("/api/image/upload", fd);
+}
+
+export function uploadFile(file: File): Promise<{ fileUrl: string; fileName: string }> {
+  const fd = new FormData();
+  fd.append("file", file);
+  return apiPostForm("/api/file/upload", fd);
 }
 
 // ---- Knowledge Base ----

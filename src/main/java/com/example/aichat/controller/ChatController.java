@@ -60,7 +60,7 @@ public class ChatController {
         LLMService.TokenUsageResult result = chatService.chatAndSave(conversationId, request.getMessage(),
                 request.getPromptId(), request.getModelConfigId(), webSearchEnabled, userId,
                 request.getImageDescription(), request.getKnowledgeBaseId(),
-                request.getLongMemoryEnabled());
+                request.getLongMemoryEnabled(), request.getImageUrl(), request.getFileUrl());
         ChatResponse response = new ChatResponse();
         response.setReply(result.getReply());
         response.setInputTokens(result.getInputTokens());
@@ -98,7 +98,9 @@ public class ChatController {
                 userId,
                 request.getImageDescription(),
                 request.getKnowledgeBaseId(),
-                request.getLongMemoryEnabled()
+                request.getLongMemoryEnabled(),
+                request.getImageUrl(),
+                request.getFileUrl()
         );
 
         return ResponseEntity.ok()

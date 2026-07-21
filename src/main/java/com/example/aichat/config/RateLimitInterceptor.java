@@ -151,6 +151,15 @@ public class RateLimitInterceptor implements HandlerInterceptor {
                 "image-upload"
         ));
 
+        // 文件上传 30 次/天（工具调用路径）
+        rules.add(new RateLimitRule(
+                uri -> uri.equals("/api/file/upload"),
+                "POST",
+                30,
+                TimeUnit.DAYS.toMillis(1),
+                "file-upload"
+        ));
+
         // 知识库文档上传 50 次/天
         rules.add(new RateLimitRule(
                 uri -> uri.matches("/api/kb/\\d+/docs/upload"),

@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 
 import jakarta.validation.ConstraintViolationException;
 import java.util.HashMap;
@@ -17,6 +18,12 @@ import java.util.Map;
 public class GlobalExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    /** SSE 流式请求超时 — 静默处理，不尝试返回 JSON body */
+    @ExceptionHandler(AsyncRequestTimeoutException.class)
+    public void handleAsyncTimeout(AsyncRequestTimeoutException e) {
+        logger.warn("SSE 流式请求超时，客户端可能已断开");
+    }
 
     /** 业务异常 — 消息透传给前端，状态码按异常指定 */
     @ExceptionHandler(BusinessException.class)

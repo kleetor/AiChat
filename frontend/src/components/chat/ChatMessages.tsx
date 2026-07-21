@@ -7,6 +7,7 @@ interface Message {
   content: string;
   createdAt?: string;
   isLocal?: boolean;
+  fileUrl?: string | null;
 }
 
 interface ChatMessagesProps {
@@ -68,6 +69,13 @@ export default function ChatMessages({ messages, isGenerating, onDeleteMessage }
             style={msg.role !== "user" ? { borderColor: msg.role === "system" ? "transparent" : "hsl(var(--border))" } : undefined}
           >
             <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+            {msg.fileUrl && msg.role === "user" && (
+              <img
+                src={msg.fileUrl}
+                alt="上传的图片"
+                className="mt-2 max-w-full rounded-lg max-h-64 object-contain"
+              />
+            )}
             {msg.createdAt && (
               <span className="block text-[10px] mt-1.5 opacity-50">
                 {new Date(msg.createdAt).toLocaleString()}

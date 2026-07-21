@@ -19,6 +19,7 @@ import { useNotifications } from "@/lib/hooks/useNotifications";
 import { useFriends } from "@/lib/hooks/useFriends";
 import { useBilling } from "@/lib/hooks/useBilling";
 import { useImageUpload } from "@/lib/hooks/useImageUpload";
+import { useFileUpload } from "@/lib/hooks/useFileUpload";
 import {
   getChatHistory,
   getModelConfigs,
@@ -27,6 +28,7 @@ import {
   updatePrompt,
   deletePrompt,
   uploadImage,
+  uploadFile,
   getKBList,
   sponsorCreate,
   deleteChatMessage as deleteChatMsg,
@@ -68,6 +70,7 @@ export default function App() {
   const friends = useFriends();
   const billing = useBilling();
   const img = useImageUpload((msg) => toast("error", msg));
+  const file = useFileUpload((msg) => toast("error", msg));
 
   // ---- Load data after login ----
   useEffect(() => {
@@ -164,9 +167,11 @@ export default function App() {
       knowledgeBaseId: selectedKBId,
       longMemoryEnabled: true,
       imageDescription: img.imageDescriptionRef.current,
+      fileUrl: file.fileUrlRef.current,
     };
 
     img.clearImageUpload();
+    file.clearFileUpload();
 
     await chat.handleSend(
       req,
@@ -179,7 +184,7 @@ export default function App() {
 
     setInputValue("");
     conv.loadConversations(); // refresh titles
-  }, [inputValue, isLoggedIn, selectedModelId, activePrompt, webSearchEnabled, selectedKBId, chat, conv, img]);
+  }, [inputValue, isLoggedIn, selectedModelId, activePrompt, webSearchEnabled, selectedKBId, chat, conv, img, file]);
 
   // ---- Tool click ----
   const handleToolClick = useCallback((id: string) => {
@@ -284,10 +289,14 @@ export default function App() {
           onStop={chat.handleStop}
           isGenerating={chat.isGenerating}
           disabled={!isLoggedIn}
-          onImageUpload={isLoggedIn ? (file) => img.handleImageUpload(file, uploadImage) : undefined}
+          onImageUpload={isLoggedIn ? (f) => img.handleImageUpload(f, uploadImage) : undefined}
           onClearImage={img.clearImageUpload}
           imageUploading={img.imageUploading}
           imagePreview={img.imagePreview}
+          onFileUpload={isLoggedIn ? (f) => file.handleFileUpload(f, uploadFile) : undefined}
+          onClearFile={file.clearFileUpload}
+          fileUploading={file.fileUploading}
+          fileName={file.fileName}
           webSearchEnabled={webSearchEnabled}
           onWebSearchChange={setWebSearchEnabled}
         />
