@@ -36,7 +36,8 @@ build/
 .env
 
 ### Uploads ###
-uploads/
+uploads/*
+!uploads/random-covers/
 
 ### ChromaDB ###
 chroma_data/
