@@ -44,3 +44,7 @@ chroma_data/
 
 ### Temp files ###
 query
+
+### Plans & SQL ###
+Plans*/
+SQL/
