@@ -38,6 +38,8 @@ build/
 ### Uploads ###
 uploads/*
 !uploads/random-covers/
+!uploads/random-covers/*
+!uploads/**/.gitkeep
 
 ### ChromaDB ###
 chroma_data/
