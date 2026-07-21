@@ -245,7 +245,7 @@ public class ChatStreamService {
             } catch (Exception e) {
                 logger.error("流式聊天异常", e);
                 safeSend(emitter, "error",
-                        "AI回复失败：" + e.getMessage(), org.springframework.http.MediaType.TEXT_PLAIN);
+                        "AI回复失败，请稍后重试", org.springframework.http.MediaType.TEXT_PLAIN);
                 safeComplete(emitter);
             }
         };
@@ -554,7 +554,7 @@ public class ChatStreamService {
         } catch (Exception e) {
             logger.error("Phase 2 请求失败", e);
             safeSend(emitter, "error",
-                    "工具调用后生成回复失败: " + e.getMessage(),
+                    "工具调用后生成回复失败，请稍后重试",
                     org.springframework.http.MediaType.TEXT_PLAIN);
         }
     }

@@ -46,15 +46,20 @@ public class EmailService {
         }
     }
 
+    private String generateCode() {
+        return String.format("%06d", ThreadLocalRandom.current().nextInt(100000, 1000000));
+    }
+
     public void sendVerificationCode(String email) {
-        if (codeMap.containsKey(email)) {
-            EmailCode existing = codeMap.get(email);
-            if (System.currentTimeMillis() - existing.createTime < 60000) {
+        String code = generateCode();
+
+        // 原子地检查并预留验证码槽位，防止并发 TOCTOU 绕过
+        codeMap.compute(email, (k, existing) -> {
+            if (existing != null && System.currentTimeMillis() - existing.createTime < 60000) {
                 throw BusinessException.badRequest("请稍后再试，验证码已发送");
             }
-        }
-
-        String code = String.format("%06d", ThreadLocalRandom.current().nextInt(1000000));
+            return new EmailCode(code);
+        });
 
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailProperties.getUsername());
@@ -64,9 +69,9 @@ public class EmailService {
 
         try {
             mailSender.send(message);
-            codeMap.put(email, new EmailCode(code));
             logger.info("验证码已发送至: {}", email);
         } catch (Exception e) {
+            codeMap.remove(email); // 发送失败时回滚，允许重试
             logger.error("发送验证码失败: {}", email, e);
             throw new RuntimeException("发送验证码失败，请检查邮箱地址");
         }
@@ -100,14 +105,15 @@ public class EmailService {
     }
 
     public void sendResetCode(String email) {
-        if (resetCodeMap.containsKey(email)) {
-            EmailCode existing = resetCodeMap.get(email);
-            if (System.currentTimeMillis() - existing.createTime < 60000) {
+        String code = generateCode();
+
+        // 原子地检查并预留验证码槽位，防止并发 TOCTOU 绕过
+        resetCodeMap.compute(email, (k, existing) -> {
+            if (existing != null && System.currentTimeMillis() - existing.createTime < 60000) {
                 throw BusinessException.badRequest("请稍后再试，验证码已发送");
             }
-        }
-
-        String code = String.format("%06d", ThreadLocalRandom.current().nextInt(1000000));
+            return new EmailCode(code);
+        });
 
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailProperties.getUsername());
@@ -117,9 +123,9 @@ public class EmailService {
 
         try {
             mailSender.send(message);
-            resetCodeMap.put(email, new EmailCode(code));
             logger.info("密码重置验证码已发送至: {}", email);
         } catch (Exception e) {
+            resetCodeMap.remove(email); // 发送失败时回滚，允许重试
             logger.error("发送密码重置验证码失败: {}", email, e);
             throw new RuntimeException("发送验证码失败，请检查邮箱地址");
         }
