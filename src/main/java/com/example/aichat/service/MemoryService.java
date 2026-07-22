@@ -340,6 +340,14 @@ public class MemoryService {
             oldItem.setValidUntil(LocalDateTime.now());
             oldItem.setSupersededById(newItem.getId());
             memoryRepo.save(oldItem);
+
+            // 优化2: 级联失效旧记忆关联的知识图谱关系
+            try {
+                graphMemoryService.expireRelations(oldItem.getId());
+            } catch (Exception e) {
+                log.warn("关系过期失败: itemId={}: {}", oldItem.getId(), e.getMessage());
+            }
+
             log.info("时态冲突已解决: oldId={}, newId={}", oldItem.getId(), newItem.getId());
         }
     }

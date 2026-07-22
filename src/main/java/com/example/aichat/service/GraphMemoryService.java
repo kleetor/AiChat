@@ -50,9 +50,11 @@ public class GraphMemoryService {
 
         for (Triple t : triples) {
             try {
-                // 1. upsert 实体
-                MemoryEntity subject = getOrCreateEntity(userId, t.subject, inferType(t.subject));
-                MemoryEntity object = getOrCreateEntity(userId, t.object, inferType(t.object));
+                // 1. upsert 实体（优化4: LLM 类型优先，fallback 到规则推断）
+                String subjType = t.subjectType != null ? t.subjectType : inferType(t.subject);
+                String objType  = t.objectType  != null ? t.objectType  : inferType(t.object);
+                MemoryEntity subject = getOrCreateEntity(userId, t.subject, subjType);
+                MemoryEntity object = getOrCreateEntity(userId, t.object, objType);
 
                 // 2. 建立记忆-实体关联
                 saveItemEntityLink(memory.getId(), subject.getId(), "SUBJECT");
@@ -126,14 +128,19 @@ public class GraphMemoryService {
 
     // ==================== 内部方法 ====================
 
-    /** 用 LLM 从事实文本中提取 (主语, 谓词, 宾语) */
+    /** 优化4: 用 LLM 从事实文本中提取 (主语, 谓词, 宾语, 类型)，含 few-shot 示例 */
     private List<Triple> extractTriples(String text) {
         try {
             String prompt = """
-                从以下描述中提取三元组。每行一组，格式：主语 | 谓词 | 宾语
-                主语/宾语: 人名/地名/机构名/产品名等专有名词
+                从以下描述中提取三元组。每行一组，格式：主语 | 谓词 | 宾语 | 主语类型 | 宾语类型
+                类型: PERSON / ORG / LOCATION / PRODUCT / MISC
                 谓词: 如 工作于/居住于/毕业于/拥有/喜欢/调到/升为
                 无实体则回复 NONE
+
+                示例:
+                张三在北京工作 → 张三 | 工作于 | 北京 | PERSON | LOCATION
+                李华就职于华为公司 → 李华 | 任职于 | 华为公司 | PERSON | ORG
+                小王毕业于北京大学 → 小王 | 毕业于 | 北京大学 | PERSON | ORG
 
                 描述: %s
                 """.formatted(text);
@@ -145,13 +152,20 @@ public class GraphMemoryService {
             for (String line : result.split("\n")) {
                 line = line.strip();
                 if (line.isEmpty()) continue;
-                String[] parts = line.split("\\|", 3);
+                String[] parts = line.split("\\|");
                 if (parts.length < 3) continue;
-                triples.add(new Triple(
-                        parts[0].strip(),
-                        parts[1].strip(),
-                        parts[2].strip()
-                ));
+                String subject = parts[0].strip();
+                String predicate = parts[1].strip();
+                String object = parts[2].strip();
+                String subjectType = parts.length >= 4 ? parts[3].strip() : inferType(subject);
+                String objectType = parts.length >= 5 ? parts[4].strip() : inferType(object);
+
+                // 校验
+                if (subject.equals(object)) continue;          // 主语≠宾语
+                if (predicate.length() > 50) continue;        // 谓词长度 ≤ 50
+                if (subject.isEmpty() || object.isEmpty()) continue;
+
+                triples.add(new Triple(subject, predicate, object, subjectType, objectType));
             }
             return triples;
         } catch (Exception e) {
@@ -184,16 +198,153 @@ public class GraphMemoryService {
         }
     }
 
-    /** 保存实体间关系（不做去重，同关系可多次出现） */
+    // 优化5: 高频谓词反向映射
+    private static final Map<String, String> PREDICATE_INVERSES = Map.of(
+            "工作于", "拥有员工",
+            "位于",   "包含",
+            "毕业于", "培养",
+            "属于",   "包含",
+            "任职于", "拥有员工",
+            "调往",   "接收"
+    );
+
+    /** 优化1+5: 保存实体间关系，去重并自动追加反向边 */
     private void saveRelation(Long subjectId, String predicate, Long objectId, Long sourceItemId, Long userId) {
-        relationRepo.save(MemoryRelation.builder()
-                .subjectId(subjectId)
-                .predicate(predicate)
-                .objectId(objectId)
-                .sourceItemId(sourceItemId)
-                .userId(userId)
-                .build());
+        // 优化1: 去重 — 存在则更新 valid_until 和 source_item_id
+        var existing = relationRepo.findBySubjectIdAndPredicateAndObjectId(subjectId, predicate, objectId);
+        if (existing.isPresent()) {
+            MemoryRelation rel = existing.get();
+            rel.setValidUntil(null); // 重新激活
+            rel.setSourceItemId(sourceItemId);
+            relationRepo.save(rel);
+            log.debug("关系去重: {} -[{}]-> {}", subjectId, predicate, objectId);
+        } else {
+            relationRepo.save(MemoryRelation.builder()
+                    .subjectId(subjectId)
+                    .predicate(predicate)
+                    .objectId(objectId)
+                    .sourceItemId(sourceItemId)
+                    .userId(userId)
+                    .build());
+        }
+
+        // 优化5: 自动追加反向边
+        String inverse = PREDICATE_INVERSES.get(predicate);
+        if (inverse != null) {
+            var invExisting = relationRepo.findBySubjectIdAndPredicateAndObjectId(objectId, inverse, subjectId);
+            if (invExisting.isEmpty()) {
+                relationRepo.save(MemoryRelation.builder()
+                        .subjectId(objectId)
+                        .predicate(inverse)
+                        .objectId(subjectId)
+                        .sourceItemId(sourceItemId)
+                        .userId(userId)
+                        .build());
+            }
+        }
     }
+
+    /** 优化2: 将指定 sourceItem 的所有关系标记为过期 */
+    @Transactional
+    public void expireRelations(Long itemId) {
+        int count = relationRepo.expireBySourceItemId(itemId, LocalDateTime.now());
+        if (count > 0) {
+            log.info("关系过期: sourceItemId={}, count={}", itemId, count);
+        }
+    }
+
+    // ==================== 优化6: 实体消歧 ====================
+
+    /**
+     * 用 LLM 扫描用户所有实体，识别可合并的候选对（同人异名/简称全称等）。
+     * @return 合并候选列表 [{fromId, toId}]，toId 为保留的目标实体
+     */
+    public List<MergeCandidate> suggestMerges(Long userId) {
+        List<MemoryEntity> entities = entityRepo.findByUserId(userId);
+        if (entities.size() < 2) return List.of();
+
+        // 构建实体清单
+        StringBuilder sb = new StringBuilder();
+        for (MemoryEntity e : entities) {
+            sb.append(e.getId()).append(": ").append(e.getName()).append(" (").append(e.getType()).append(")\n");
+        }
+
+        try {
+            String prompt = """
+                以下是一个用户的实体列表（格式: 编号: 名称 (类型)）。
+                请找出其中可能指代同一真实实体的对（如同一个人不同称呼、机构全称与简称）。
+                返回 JSON 数组，每个元素包含 from 和 to 字段（from 为应合并掉的编号，to 为保留的目标编号）。
+                无候选则返回空数组 []。
+
+                实体列表:
+                %s
+                """.formatted(sb.toString());
+
+            String result = llmService.chatSync(prompt);
+            if (result == null || result.trim().isEmpty()) return List.of();
+
+            // 提取 JSON 部分（LLM 可能包裹在 ```json ... ``` 中）
+            String json = result.trim();
+            if (json.contains("```")) {
+                json = json.replaceAll("```\\w*\\n?", "").replace("```", "").trim();
+            }
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> raw = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readValue(json, new com.fasterxml.jackson.core.type.TypeReference<>() {});
+            return raw.stream()
+                    .map(m -> new MergeCandidate(
+                            ((Number) m.get("from")).longValue(),
+                            ((Number) m.get("to")).longValue()))
+                    .toList();
+        } catch (Exception e) {
+            log.warn("实体消歧建议失败: userId={}: {}", userId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * 执行实体合并：将 fromId 的所有关系和关联转移到 toId，然后删除 fromId。
+     * 在事务中执行，保证原子性。
+     */
+    @Transactional
+    public void mergeEntities(Long fromId, Long toId) {
+        if (fromId.equals(toId)) {
+            log.warn("实体合并跳过: fromId == toId == {}", fromId);
+            return;
+        }
+
+        MemoryEntity fromEntity = entityRepo.findById(fromId).orElse(null);
+        MemoryEntity toEntity = entityRepo.findById(toId).orElse(null);
+        if (fromEntity == null || toEntity == null) {
+            log.warn("实体合并跳过: 实体不存在 fromId={}, toId={}", fromId, toId);
+            return;
+        }
+
+        log.info("实体合并开始: {} (id={}) → {} (id={})", fromEntity.getName(), fromId, toEntity.getName(), toId);
+
+        // 1. 删除会产生唯一约束冲突的 memory_item_entities 行
+        int deletedLinks = itemEntityRepo.deleteConflicting(fromId, toId);
+        log.debug("  删除冲突关联: {} 行", deletedLinks);
+
+        // 2. 将剩余 memory_item_entities 转移到目标实体
+        int updatedLinks = itemEntityRepo.updateEntityId(fromId, toId);
+        log.debug("  转移关联: {} 行", updatedLinks);
+
+        // 3. 更新关系中的 subject_id
+        int updatedSubject = relationRepo.updateSubjectId(fromId, toId);
+        log.debug("  更新 subject_id: {} 行", updatedSubject);
+
+        // 4. 更新关系中的 object_id
+        int updatedObject = relationRepo.updateObjectId(fromId, toId);
+        log.debug("  更新 object_id: {} 行", updatedObject);
+
+        // 5. 删除源实体（数据库级联会处理 FK）
+        entityRepo.deleteById(fromId);
+        log.info("实体合并完成: {} → {}", fromEntity.getName(), toEntity.getName());
+    }
+
+    public record MergeCandidate(long fromId, long toId) {}
 
     /** 根据实体名推断类型 */
     private String inferType(String name) {
@@ -210,5 +361,9 @@ public class GraphMemoryService {
         return "MISC";
     }
 
-    record Triple(String subject, String predicate, String object) {}
+    record Triple(String subject, String predicate, String object, String subjectType, String objectType) {
+        Triple(String subject, String predicate, String object) {
+            this(subject, predicate, object, null, null);
+        }
+    }
 }
