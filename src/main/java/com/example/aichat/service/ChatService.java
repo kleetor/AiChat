@@ -131,7 +131,7 @@ public class ChatService {
             chatHistoryService.saveMessage(conversationId, userMessage, result.getReply());
             updateConversationTitleIfNeeded(conversationId, userMessage);
 
-            chatPostProcessor.triggerAsyncProcessing(userId, conversationId, userMessage, result.getReply(), longMemoryEnabled);
+            chatPostProcessor.triggerAsyncProcessing(userId, conversationId, userMessage, result.getReply(), longMemoryEnabled, promptId);
 
             return result;
         } catch (Exception e) {
@@ -174,10 +174,10 @@ public class ChatService {
             logger.info("使用工具调用路径: tools={}, imageUrl={}", 
                     tools.stream().map(ToolDefinition::getName).toList(), imageUrl);
             return chatStreamService.streamWithToolLoop(messagesArray, config, conversationId,
-                    userMessage, userId, longMemoryEnabled, tools, 0);
+                    userMessage, userId, longMemoryEnabled, promptId, tools, 0);
         } else {
             return chatStreamService.streamDeepSeek(messagesArray, config, conversationId,
-                    userMessage, userId, longMemoryEnabled);
+                    userMessage, userId, longMemoryEnabled, promptId);
         }
     }
 

@@ -55,9 +55,33 @@ public class MemoryItem {
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    @Column(name = "valid_from", nullable = false)
+    @Builder.Default
+    private LocalDateTime validFrom = LocalDateTime.now();
+
+    @Column(name = "valid_until")
+    private LocalDateTime validUntil;
+
+    @Column(name = "superseded_by_id")
+    private Long supersededById;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private MemoryStatus status = MemoryStatus.ACTIVE;
+
+    @Column(name = "prompt_id")
+    private Long promptId;
+
     public enum DetailLevel {
         FULL,   // 清晰期: 原文全文
         BRIEF,  // 模糊期: ~200字摘要
         TITLE   // 轮廓期: 一行~50字
+    }
+
+    public enum MemoryStatus {
+        ACTIVE,      // 当前有效
+        SUPERSEDED,  // 被新事实取代（时态管理）
+        EXPIRED      // 衰减到期（懒衰减）
     }
 }

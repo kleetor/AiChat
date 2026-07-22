@@ -28,7 +28,8 @@ public class ChatPostProcessor {
      */
     public void triggerAsyncProcessing(Long userId, Long conversationId,
                                         String userMessage, String aiReply,
-                                        Boolean longMemoryEnabled) {
+                                        Boolean longMemoryEnabled,
+                                        Long promptId) {
         if (userId == null || !Boolean.TRUE.equals(longMemoryEnabled)) {
             return;
         }
@@ -36,7 +37,7 @@ public class ChatPostProcessor {
             return;
         }
         try {
-            memoryService.extractAndStore(userId, conversationId, userMessage, aiReply);
+            memoryService.extractAndStore(userId, conversationId, userMessage, aiReply, promptId);
             summaryService.checkAndGenerate(conversationId);
         } catch (Exception e) {
             logger.warn("后处理触发失败: userId={}, conversationId={}", userId, conversationId, e);

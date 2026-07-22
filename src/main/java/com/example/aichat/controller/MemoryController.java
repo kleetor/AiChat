@@ -83,10 +83,12 @@ public class MemoryController {
         return ResponseEntity.ok().build();
     }
 
-    /** 手动检索记忆 (模式3) */
+    /** 手动检索记忆 (模式3)，promptId 可选用于角色隔离 */
     @PostMapping("/search")
     public List<MemoryItem> search(@RequestBody Map<String, Object> body, Authentication auth) {
         String query = (String) body.get("query");
-        return memoryService.searchAndRecall(getUserId(auth), query);
+        Long promptId = body.get("promptId") instanceof Number
+                ? ((Number) body.get("promptId")).longValue() : null;
+        return memoryService.searchAndRecall(getUserId(auth), query, promptId);
     }
 }

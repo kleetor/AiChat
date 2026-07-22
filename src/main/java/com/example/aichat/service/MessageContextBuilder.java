@@ -34,6 +34,7 @@ public class MessageContextBuilder {
     private final ConversationSummaryRepository summaryRepo;
     private final ChromaDBService chromaDBService;
     private final SystemRuleRepository systemRuleRepository;
+    private final GraphMemoryService graphMemoryService;
     private final ObjectMapper objectMapper;
 
     public MessageContextBuilder(ChatMessageRepository chatMessageRepository,
@@ -41,13 +42,15 @@ public class MessageContextBuilder {
                                   MemoryService memoryService,
                                   ConversationSummaryRepository summaryRepo,
                                   ChromaDBService chromaDBService,
-                                  SystemRuleRepository systemRuleRepository) {
+                                  SystemRuleRepository systemRuleRepository,
+                                  GraphMemoryService graphMemoryService) {
         this.chatMessageRepository = chatMessageRepository;
         this.promptService = promptService;
         this.memoryService = memoryService;
         this.summaryRepo = summaryRepo;
         this.chromaDBService = chromaDBService;
         this.systemRuleRepository = systemRuleRepository;
+        this.graphMemoryService = graphMemoryService;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -94,13 +97,37 @@ public class MessageContextBuilder {
             }
         }
 
-        // 2. 注入长期记忆 — 最近N条清晰期/模糊期记忆 (时间倒序)
+        // 2. 注入长期记忆 — 最近N条清晰期/模糊期记忆 + 图扩展
         if (userId != null && Boolean.TRUE.equals(longMemoryEnabled)) {
             try {
-                List<MemoryItem> memories = memoryService.getRecentMemoriesForContext(userId);
+                List<MemoryItem> memories = memoryService.getRecentMemoriesForContext(userId, promptId);
+
+                // 图扩展：对每条种子记忆做1跳扩展，合并去重
                 if (!memories.isEmpty()) {
+                    java.util.Set<Long> seenIds = new java.util.HashSet<>();
+                    List<MemoryItem> allMemories = new java.util.ArrayList<>();
+                    for (MemoryItem seed : memories) {
+                        if (seenIds.add(seed.getId())) {
+                            allMemories.add(seed);
+                        }
+                    }
+                    for (MemoryItem seed : memories) {
+                        if (allMemories.size() >= 20) break;
+                        try {
+                            List<MemoryItem> expanded = graphMemoryService.expandViaGraph(seed.getId(), 5);
+                            for (MemoryItem m : expanded) {
+                                if (allMemories.size() >= 20) break;
+                                if (seenIds.add(m.getId())) {
+                                    allMemories.add(m);
+                                }
+                            }
+                        } catch (Exception e) {
+                            logger.debug("图扩展跳过: id={}: {}", seed.getId(), e.getMessage());
+                        }
+                    }
+
                     StringBuilder sb = new StringBuilder("【关于用户的已知信息（最近）】\n");
-                    for (var m : memories) {
+                    for (var m : allMemories) {
                         sb.append("- ").append(m.getValue()).append("\n");
                     }
                     ObjectNode memNode = messagesArray.addObject();
@@ -108,7 +135,7 @@ public class MessageContextBuilder {
                     memNode.put("content", sb.toString());
 
                     // 注入即访问: 批量刷新 lastAccessedAt
-                    List<Long> touchedIds = memories.stream().map(MemoryItem::getId).collect(Collectors.toList());
+                    List<Long> touchedIds = allMemories.stream().map(MemoryItem::getId).collect(Collectors.toList());
                     memoryService.touchMemories(touchedIds);
                 }
             } catch (Exception e) {

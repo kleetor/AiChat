@@ -80,9 +80,9 @@ public class ChatStreamService {
      */
     public SseEmitter streamDeepSeek(ArrayNode messages, ModelConfig config,
                                       Long conversationId, String userMessage, Long userId,
-                                      Boolean longMemoryEnabled) {
+                                      Boolean longMemoryEnabled, Long promptId) {
         return doStream(messages, config, conversationId, userMessage, userId,
-                longMemoryEnabled, Collections.emptyList(), 0);
+                longMemoryEnabled, promptId, Collections.emptyList(), 0);
     }
 
     /**
@@ -91,10 +91,10 @@ public class ChatStreamService {
      */
     public SseEmitter streamWithToolLoop(ArrayNode messages, ModelConfig config,
                                           Long conversationId, String userMessage, Long userId,
-                                          Boolean longMemoryEnabled,
+                                          Boolean longMemoryEnabled, Long promptId,
                                           List<ToolDefinition> tools, int round) {
         return doStream(messages, config, conversationId, userMessage, userId,
-                longMemoryEnabled, tools, round);
+                longMemoryEnabled, promptId, tools, round);
     }
 
     // ==================== 核心流式方法 ====================
@@ -106,7 +106,7 @@ public class ChatStreamService {
      */
     private SseEmitter doStream(ArrayNode messages, ModelConfig config,
                                  Long conversationId, String userMessage, Long userId,
-                                 Boolean longMemoryEnabled,
+                                 Boolean longMemoryEnabled, Long promptId,
                                  List<ToolDefinition> tools, int round) {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         String apiUrl = config.getApiUrl();
@@ -234,7 +234,7 @@ public class ChatStreamService {
                     completionTokensRef.set(completionTokens);
                     doBilling.run();
 
-                    chatPostProcessor.triggerAsyncProcessing(userId, conversationId, userMessage, completeResponse, longMemoryEnabled);
+                    chatPostProcessor.triggerAsyncProcessing(userId, conversationId, userMessage, completeResponse, longMemoryEnabled, promptId);
 
                     String doneData = savedMessageId != null
                             ? "{\"done\":true,\"messageId\":" + savedMessageId + "}"

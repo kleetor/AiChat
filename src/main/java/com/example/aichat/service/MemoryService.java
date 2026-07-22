@@ -3,6 +3,7 @@ package com.example.aichat.service;
 import com.example.aichat.config.props.MemoryProperties;
 import com.example.aichat.model.MemoryItem;
 import com.example.aichat.model.MemoryItem.DetailLevel;
+import com.example.aichat.model.MemoryItem.MemoryStatus;
 import com.example.aichat.repository.MemoryItemRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,15 +36,24 @@ public class MemoryService {
     private final MemoryItemRepository memoryRepo;
     private final LLMService llmService;
     private final MemoryProperties memoryProperties;
+    private final GraphMemoryService graphMemoryService;
+    private final HybridRetrievalService hybridRetrievalService;
+    private final Bm25IndexService bm25Service;
 
     public MemoryService(MemoryChromaService chromaService,
                          MemoryItemRepository memoryRepo,
                          LLMService llmService,
-                         MemoryProperties memoryProperties) {
+                         MemoryProperties memoryProperties,
+                         GraphMemoryService graphMemoryService,
+                         HybridRetrievalService hybridRetrievalService,
+                         Bm25IndexService bm25Service) {
         this.chromaService = chromaService;
         this.memoryRepo = memoryRepo;
         this.llmService = llmService;
         this.memoryProperties = memoryProperties;
+        this.graphMemoryService = graphMemoryService;
+        this.hybridRetrievalService = hybridRetrievalService;
+        this.bm25Service = bm25Service;
     }
 
     // ==================== 模式1: 自动提取 ====================
@@ -54,7 +64,7 @@ public class MemoryService {
      */
     @Async
     public void extractAndStore(Long userId, Long conversationId,
-                                String userMessage, String aiReply) {
+                                String userMessage, String aiReply, Long promptId) {
         try {
             String prompt = """
                 从以下对话中提取关于用户的值得长期记住的关键信息。
@@ -87,7 +97,7 @@ public class MemoryService {
                 String chromaId = chromaService.addMemory(userId, line,
                         Map.of("conversation_id", String.valueOf(conversationId)));
 
-                memoryRepo.save(MemoryItem.builder()
+                MemoryItem item = MemoryItem.builder()
                         .userId(userId)
                         .chromaId(chromaId)
                         .value(line)
@@ -95,7 +105,31 @@ public class MemoryService {
                         .detailLevel(DetailLevel.FULL)
                         .source("AUTO")
                         .conversationId(conversationId)
-                        .build());
+                        .validFrom(LocalDateTime.now())
+                        .promptId(promptId)
+                        .build();
+                item = memoryRepo.save(item);
+
+                // 知识图谱: 提取实体、建立关系
+                try {
+                    graphMemoryService.linkMemory(userId, item, line);
+                } catch (Exception e) {
+                    log.warn("知识图谱链接失败: id={}: {}", item.getId(), e.getMessage());
+                }
+
+                // 时态管理: 检测是否与旧记忆冲突
+                try {
+                    detectAndResolveTemporalConflict(userId, line, item);
+                } catch (Exception e) {
+                    log.warn("时态冲突检测失败: id={}: {}", item.getId(), e.getMessage());
+                }
+
+                // BM25 索引同步
+                try {
+                    bm25Service.index(item.getId(), userId, line, promptId);
+                } catch (Exception e) {
+                    log.warn("BM25 索引同步失败: id={}", item.getId(), e);
+                }
             }
         } catch (Exception e) {
             log.warn("记忆提取失败: userId={}, convId={}", userId, conversationId, e);
@@ -105,12 +139,16 @@ public class MemoryService {
     // ==================== 模式2: 默认注入 ====================
 
     /**
-     * 获取注入上下文的最近记忆 (清晰期+模糊期，时间倒序)。
+     * 获取注入上下文的最近记忆 (清晰期+模糊期，时间倒序）。
+     * 排除已取代(SUPERSEDED)和已过期(EXPIRED)的记忆。
+     * promptId 为 null 时仅返回共享记忆，非 null 时返回共享+角色专属。
      * 每条记忆在返回前执行懒衰减检查 (实时)。
      */
-    public List<MemoryItem> getRecentMemoriesForContext(Long userId) {
-        List<MemoryItem> memories = memoryRepo.findTopNEnabled(userId,
+    public List<MemoryItem> getRecentMemoriesForContext(Long userId, Long promptId) {
+        List<MemoryItem> memories = memoryRepo.findTopNActive(userId,
                 List.of(DetailLevel.FULL, DetailLevel.BRIEF),
+                List.of(MemoryStatus.ACTIVE),
+                promptId,
                 PageRequest.of(0, memoryProperties.getInject().getRecentCount(),
                         Sort.by(Sort.Direction.DESC, "lastAccessedAt")));
 
@@ -136,22 +174,21 @@ public class MemoryService {
     // ==================== 模式3: 按需回溯 ====================
 
     /**
-     * 用户问起历史内容时，语义搜索全库并刷新访问状态。
+     * 用户问起历史内容时，混合检索（三路召回+RRF融合+Rerank精排）。
+     * promptId 为 null 时搜索共享记忆，非 null 时搜索共享+角色专属。
      * 被查到的记忆: lastAccessedAt 归零, accessCount+1,
      * 已衰减到 BRIEF/TITLE 的恢复到 FULL (从 originalValue)。
      */
     @Transactional
-    public List<MemoryItem> searchAndRecall(Long userId, String query) {
+    public List<MemoryItem> searchAndRecall(Long userId, String query, Long promptId) {
         try {
-            var hits = chromaService.search(userId, query, memoryProperties.getSearchTopK());
+            List<MemoryItem> hits = hybridRetrievalService.hybridSearch(
+                    userId, query, memoryProperties.getSearchTopK(), promptId);
             if (hits.isEmpty()) return List.of();
 
-            List<String> chromaIds = hits.stream()
-                    .map(MemoryChromaService.MemoryHit::chromaId).toList();
-            List<MemoryItem> items = memoryRepo.findByChromaIdIn(chromaIds);
             List<MemoryItem> results = new ArrayList<>();
 
-            for (var item : items) {
+            for (var item : hits) {
                 item.setLastAccessedAt(LocalDateTime.now());
                 item.setAccessCount(item.getAccessCount() + 1);
 
@@ -160,8 +197,9 @@ public class MemoryService {
                         && item.getOriginalValue() != null) {
                     item.setValue(item.getOriginalValue());
                     item.setDetailLevel(DetailLevel.FULL);
-                    // 同步 ChromaDB
                     chromaService.updateMemory(userId, item.getChromaId(), item.getOriginalValue());
+                    // BM25 索引同步恢复后的全文
+                    bm25Service.index(item.getId(), userId, item.getOriginalValue(), item.getPromptId());
                 }
                 memoryRepo.save(item);
                 results.add(item);
@@ -186,6 +224,8 @@ public class MemoryService {
      */
     private boolean checkAndApplyDecay(MemoryItem item) {
         if (!"AUTO".equals(item.getSource())) return false; // 手动记忆不衰减
+        // SUPERSEDED 的记忆不参与衰减（已在时态管理中被新事实主动取代）
+        if (item.getStatus() == MemoryStatus.SUPERSEDED) return false;
         LocalDateTime now = LocalDateTime.now();
         DetailLevel level = item.getDetailLevel();
 
@@ -229,6 +269,8 @@ public class MemoryService {
             LocalDateTime threshold = item.getLastAccessedAt().plusDays(
                     memoryProperties.getDecay().getForgetDays());
             if (now.isAfter(threshold)) {
+                item.setStatus(MemoryStatus.EXPIRED);
+                memoryRepo.save(item);
                 try { chromaService.deleteMemory(item.getUserId(), item.getChromaId()); }
                 catch (Exception e) { log.warn("ChromaDB 删除过期记忆失败: id={}", item.getId(), e); }
                 memoryRepo.delete(item);
@@ -261,11 +303,62 @@ public class MemoryService {
                 memoryRepo.save(item);
                 try { chromaService.updateMemory(item.getUserId(), item.getChromaId(), result); }
                 catch (Exception e) { log.warn("ChromaDB 异步压缩回写失败: id={}", item.getId(), e); }
+                try { bm25Service.index(item.getId(), item.getUserId(), result, item.getPromptId()); }
+                catch (Exception e) { log.warn("BM25 异步压缩回写失败: id={}", item.getId(), e); }
                 log.debug("LLM 异步压缩完成: id={}", item.getId());
             } catch (Exception e) {
                 log.warn("LLM 异步压缩失败: id={}", item.getId(), e);
             }
         });
+    }
+
+    // ==================== 时态冲突检测 ====================
+
+    /**
+     * 检测新提取的事实是否与已有记忆冲突。
+     * 例：旧"用户在北京工作" vs 新"用户调到上海了"
+     * → 旧记忆标记为 SUPERSEDED，新记忆正常为 ACTIVE。
+     */
+    private void detectAndResolveTemporalConflict(Long userId, String newFact, MemoryItem newItem) {
+        // 1. ChromaDB 搜索语义相近的旧记忆
+        var similar = chromaService.search(userId, newFact, 5).stream()
+                .filter(h -> h.score() > 0.75 && h.score() < 0.90) // 相似但不完全相同
+                .toList();
+
+        if (similar.isEmpty()) return;
+
+        for (var hit : similar) {
+            MemoryItem oldItem = memoryRepo.findByChromaId(hit.chromaId()).orElse(null);
+            if (oldItem == null || oldItem.getStatus() != MemoryStatus.ACTIVE) continue;
+            if (oldItem.getId().equals(newItem.getId())) continue;
+
+            // 2. LLM 判定是否构成冲突
+            if (!isTemporalConflict(oldItem.getOriginalValue(), newFact)) continue;
+
+            // 3. 标记旧记忆为 SUPERSEDED
+            oldItem.setStatus(MemoryStatus.SUPERSEDED);
+            oldItem.setValidUntil(LocalDateTime.now());
+            oldItem.setSupersededById(newItem.getId());
+            memoryRepo.save(oldItem);
+            log.info("时态冲突已解决: oldId={}, newId={}", oldItem.getId(), newItem.getId());
+        }
+    }
+
+    /** 用 LLM 判断两条记忆是否构成同一事实的更新/取代 */
+    private boolean isTemporalConflict(String oldFact, String newFact) {
+        try {
+            String prompt = """
+                判断以下两句话是否描述同一个事实，且新信息是对旧信息的更新/取代。
+                只回复 YES 或 NO。
+                旧: %s
+                新: %s
+                """.formatted(oldFact, newFact);
+            String result = llmService.chatSync(prompt);
+            return "YES".equalsIgnoreCase(result != null ? result.trim() : "NO");
+        } catch (Exception e) {
+            log.warn("LLM 冲突判定失败", e);
+            return false;
+        }
     }
 
     // ==================== 手动 CRUD ====================
@@ -323,6 +416,8 @@ public class MemoryService {
         memoryRepo.findById(id).ifPresent(item -> {
             if (!item.getUserId().equals(userId)) return; // 归属校验
             chromaService.deleteMemory(item.getUserId(), item.getChromaId());
+            graphMemoryService.unlinkMemory(id);
+            bm25Service.remove(id);
             memoryRepo.delete(item);
         });
     }

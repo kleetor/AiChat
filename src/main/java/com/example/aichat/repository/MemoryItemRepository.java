@@ -2,6 +2,7 @@ package com.example.aichat.repository;
 
 import com.example.aichat.model.MemoryItem;
 import com.example.aichat.model.MemoryItem.DetailLevel;
+import com.example.aichat.model.MemoryItem.MemoryStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -24,13 +25,17 @@ public interface MemoryItemRepository extends JpaRepository<MemoryItem, Long> {
 
     List<MemoryItem> findByChromaIdIn(List<String> chromaIds);
 
-    /** 获取最近N条特定层级且启用的记忆 (用于模式2注入) */
+    /** 获取最近N条特定层级、状态且启用的记忆 (用于模式2注入，排除已取代/已过期，按提示词隔离) */
     @Query("SELECT m FROM MemoryItem m WHERE m.userId = :userId " +
-           "AND m.enabled = true AND m.detailLevel IN :levels " +
+           "AND m.enabled = true AND m.status IN :statuses " +
+           "AND m.detailLevel IN :levels " +
+           "AND (m.promptId IS NULL OR m.promptId = :promptId) " +
            "ORDER BY m.lastAccessedAt DESC")
-    List<MemoryItem> findTopNEnabled(@Param("userId") Long userId,
-                                     @Param("levels") List<DetailLevel> levels,
-                                     Pageable pageable);
+    List<MemoryItem> findTopNActive(@Param("userId") Long userId,
+                                    @Param("levels") List<DetailLevel> levels,
+                                    @Param("statuses") List<MemoryStatus> statuses,
+                                    @Param("promptId") Long promptId,
+                                    Pageable pageable);
 
     /** 批量更新 lastAccessedAt 和 accessCount (避免 N+1) */
     @Modifying
