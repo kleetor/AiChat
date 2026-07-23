@@ -217,9 +217,9 @@ export default function KBModal({ open, onClose }: KBModalProps) {
               {/* 上传按钮 — 无 pending 时显示 */}
               {!pendingFile && (
                 <label className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-border text-xs text-muted-foreground cursor-pointer hover:border-primary/50 hover:text-primary transition-colors">
-                  <Upload size={14} />上传文档 (TXT / MD / PDF / DOCX / XLSX / PPTX / HTML / CSV / 图片)
+                  <Upload size={14} />上传文档 (TXT / MD / PDF / DOCX)
                   <input type="file"
-                    accept=".txt,.md,.pdf,.docx,.xlsx,.pptx,.html,.htm,.csv,.jpg,.jpeg,.png,.tiff,.tif,.bmp"
+                    accept=".txt,.md,.pdf,.docx"
                     className="hidden" onChange={handleFileSelect} />
                 </label>
               )}
