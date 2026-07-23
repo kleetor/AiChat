@@ -23,12 +23,21 @@ public class ImagePreprocessor {
         int w = src.getWidth(), h = src.getHeight();
 
         BufferedImage gray = toGrayscale(src);
+        src = null; // 帮助 GC
+
         BufferedImage binary = otsuThreshold(gray);
         gray.flush();
+        gray = null;
+
         BufferedImage denoised = medianFilter(binary, 3);
         binary.flush();
+        binary = null;
+
         BufferedImage result = deskew(denoised);
-        if (result != denoised) denoised.flush();
+        if (result != denoised) {
+            denoised.flush();
+        }
+        denoised = null;
 
         long elapsed = System.currentTimeMillis() - start;
         log.debug("图像预处理完成: {}x{} → {}x{}, {}ms", w, h, result.getWidth(), result.getHeight(), elapsed);

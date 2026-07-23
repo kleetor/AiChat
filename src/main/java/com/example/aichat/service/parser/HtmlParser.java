@@ -17,20 +17,26 @@ import java.nio.file.Path;
 public class HtmlParser implements DocumentParser {
 
     private static final Logger log = LoggerFactory.getLogger(HtmlParser.class);
+    private static final int MAX_TEXT_LENGTH = 5 * 1024 * 1024;
 
     @Override
     public String parse(Path filePath) throws IOException {
+        byte[] bytes = Files.readAllBytes(filePath);
+        log.info("[HTML] 开始解析: {} ({}KB)", filePath.getFileName(), bytes.length / 1024);
         try {
-            String html = new String(Files.readAllBytes(filePath), StandardCharsets.UTF_8);
+            String html = new String(bytes, StandardCharsets.UTF_8);
             Document doc = Jsoup.parse(html);
-
-            // 移除不需要的元素
             Elements removes = doc.select("script, style, nav, footer, header, noscript");
             removes.remove();
-
-            return doc.body().wholeText();
+            String text = doc.body().wholeText();
+            if (text.length() > MAX_TEXT_LENGTH) {
+                log.warn("[HTML] 文本过长，截断: {} → {} 字符", text.length(), MAX_TEXT_LENGTH);
+                text = text.substring(0, MAX_TEXT_LENGTH);
+            }
+            log.info("[HTML] 解析完成: {} 字符", text.length());
+            return text;
         } catch (Exception e) {
-            log.error("HTML 解析失败: {}", filePath, e);
+            log.error("[HTML] 解析失败: {}", filePath, e);
             throw new RuntimeException("HTML 解析失败: " + e.getMessage(), e);
         }
     }

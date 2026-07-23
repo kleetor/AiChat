@@ -21,4 +21,4 @@ chown -R appuser:appgroup /app/uploads
 
 # 切换到 appuser 并执行应用
 # -Duser.dir=/app 确保 JVM 的 user.dir 指向正确的工作目录，否则图片等资源路径会解析错误
-exec su -s /bin/sh appuser -c "java -Duser.dir=/app -jar /app/app.jar"
+exec su -s /bin/sh appuser -c "java -Xms512m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -Duser.dir=/app -jar /app/app.jar"

@@ -16,13 +16,17 @@ import java.nio.file.Path;
 public class ExcelParser implements DocumentParser {
 
     private static final Logger log = LoggerFactory.getLogger(ExcelParser.class);
+    private static final int MAX_ROWS = 10_000;
+    private static final int MAX_TEXT_LENGTH = 5 * 1024 * 1024;
 
     @Override
     public String parse(Path filePath) throws IOException {
+        log.info("[Excel] 开始解析: {}", filePath.getFileName());
         try (InputStream is = Files.newInputStream(filePath);
              XSSFWorkbook wb = new XSSFWorkbook(is)) {
 
             StringBuilder sb = new StringBuilder();
+            int totalRows = 0;
 
             for (int si = 0; si < wb.getNumberOfSheets(); si++) {
                 Sheet sheet = wb.getSheetAt(si);
@@ -30,7 +34,7 @@ public class ExcelParser implements DocumentParser {
 
                 sb.append("\n[工作表: ").append(sheet.getSheetName()).append("]\n");
 
-                for (int ri = 0; ri <= sheet.getLastRowNum(); ri++) {
+                for (int ri = 0; ri <= sheet.getLastRowNum() && totalRows < MAX_ROWS; ri++) {
                     Row row = sheet.getRow(ri);
                     if (row == null) continue;
 
@@ -42,14 +46,24 @@ public class ExcelParser implements DocumentParser {
                         sb.append(val);
                         if (ci < row.getLastCellNum() - 1) sb.append(" | ");
                     }
-                    if (hasContent) sb.append("\n");
+                    if (hasContent) { sb.append("\n"); totalRows++; }
+                }
+                if (totalRows >= MAX_ROWS) {
+                    sb.append("\n[行数超过上限 ").append(MAX_ROWS).append("，已截断]\n");
+                    break;
                 }
                 sb.append("\n");
             }
 
-            return sb.toString().trim();
+            String text = sb.toString().trim();
+            if (text.length() > MAX_TEXT_LENGTH) {
+                log.warn("[Excel] 文本过长，截断: {} → {} 字符", text.length(), MAX_TEXT_LENGTH);
+                text = text.substring(0, MAX_TEXT_LENGTH);
+            }
+            log.info("[Excel] 解析完成: {} 行, {} 字符", totalRows, text.length());
+            return text;
         } catch (Exception e) {
-            log.error("Excel 解析失败: {}", filePath, e);
+            log.error("[Excel] 解析失败: {}", filePath, e);
             throw new RuntimeException("Excel 解析失败: " + e.getMessage(), e);
         }
     }

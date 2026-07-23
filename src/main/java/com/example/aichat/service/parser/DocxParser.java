@@ -20,9 +20,11 @@ import java.util.List;
 public class DocxParser implements DocumentParser {
 
     private static final Logger log = LoggerFactory.getLogger(DocxParser.class);
+    private static final int MAX_TEXT_LENGTH = 5 * 1024 * 1024;
 
     @Override
     public String parse(Path filePath) throws IOException {
+        log.info("[DOCX] 开始解析: {}", filePath.getFileName());
         try (InputStream is = Files.newInputStream(filePath);
              XWPFDocument doc = new XWPFDocument(is)) {
 
@@ -52,7 +54,6 @@ public class DocxParser implements DocumentParser {
                         if (ci < cells.size() - 1) sb.append(" | ");
                     }
                     sb.append("\n");
-                    // 表头分隔线
                     if (ri == 0 && rows.size() > 1) {
                         sb.append("-".repeat(10)).append(" | ").append("-".repeat(10)).append("\n");
                     }
@@ -60,9 +61,15 @@ public class DocxParser implements DocumentParser {
                 sb.append("\n");
             }
 
-            return sb.toString().trim();
+            String text = sb.toString().trim();
+            if (text.length() > MAX_TEXT_LENGTH) {
+                log.warn("[DOCX] 文本过长，截断: {} → {} 字符", text.length(), MAX_TEXT_LENGTH);
+                text = text.substring(0, MAX_TEXT_LENGTH);
+            }
+            log.info("[DOCX] 解析完成: {} 字符", text.length());
+            return text;
         } catch (Exception e) {
-            log.error("Word 解析失败: {}", filePath, e);
+            log.error("[DOCX] 解析失败: {}", filePath, e);
             throw new RuntimeException("Word 文档解析失败: " + e.getMessage(), e);
         }
     }

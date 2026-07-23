@@ -171,8 +171,8 @@ public class KnowledgeBaseService {
 
     /** 上传文档 */
     @Caching(evict = {
-        @CacheEvict(value = "kbList", key = "#userId"),
-        @CacheEvict(value = "kbDocs", key = "#userId + '_' + #kbId")
+        @CacheEvict(value = "kbList", key = "#userId", beforeInvocation = true),
+        @CacheEvict(value = "kbDocs", key = "#userId + '_' + #kbId", beforeInvocation = true)
     })
     public KbDocument uploadDocument(Long kbId, Long userId, MultipartFile file, boolean forceOcr) throws IOException {
         KnowledgeBase kb = kbRepo.findById(kbId)
@@ -228,7 +228,9 @@ public class KnowledgeBaseService {
         if (!kb.getUserId().equals(userId)) {
             throw BusinessException.forbidden("无权查看该知识库文档");
         }
-        return docRepo.findByKbId(kbId);
+        List<KbDocument> docs = docRepo.findByKbId(kbId);
+        log.debug("[缓存] listDocuments: kbId={}, 文档数={}", kbId, docs.size());
+        return docs;
     }
 
     /** 删除文档 */
@@ -256,8 +258,8 @@ public class KnowledgeBaseService {
 
     /** 重新索引文档 */
     @Caching(evict = {
-        @CacheEvict(value = "kbList", key = "#userId"),
-        @CacheEvict(value = "kbDocs", allEntries = true)
+        @CacheEvict(value = "kbList", key = "#userId", beforeInvocation = true),
+        @CacheEvict(value = "kbDocs", allEntries = true, beforeInvocation = true)
     })
     public void reindex(Long docId, Long userId) {
         transactionTemplate.executeWithoutResult(status -> {
@@ -321,6 +323,10 @@ public class KnowledgeBaseService {
                 Integer chunkSize = kb != null ? kb.getChunkSize() : null;
                 Integer chunkOverlap = kb != null ? kb.getChunkOverlap() : null;
                 List<String> chunks = chunkingService.split(text, chunkSize, chunkOverlap);
+                // 释放原始文本，后续只保留分块
+                text = null;
+                System.gc();
+
                 if (chunks.isEmpty()) {
                     doc.setStatus("ERROR");
                     doc.setErrorMsg("文档无有效文本内容");
@@ -341,15 +347,21 @@ public class KnowledgeBaseService {
                     dataList.add(new ChromaDBService.ChunkData(
                             docId, i, doc.getFileName(), chunks.get(i)));
                 }
+                int chunkCount = chunks.size();
+                // 释放分块列表，只保留 dataList
+                chunks = null;
+
                 chromaDBService.addChunks(doc.getKbId(), dataList);
-                // 同步写入 BM25 关键词索引
                 bm25Service.indexChunks(doc.getKbId(), dataList);
+                // 索引完成后释放 dataList
+                dataList = null;
+                System.gc();
 
                 doc.setStatus("READY");
                 doc.setErrorMsg(null);
-                doc.setChunkCount(chunks.size());
+                doc.setChunkCount(chunkCount);
                 docRepo.save(doc);
-                kbRepo.incrementCounts(doc.getKbId(), 1, chunks.size(), doc.getFileSize());
+                kbRepo.incrementCounts(doc.getKbId(), 1, chunkCount, doc.getFileSize());
                 success[0] = true;
             } catch (Exception e) {
                 log.error("文档处理失败: docId={}", docId, e);
@@ -368,18 +380,21 @@ public class KnowledgeBaseService {
 
     /** 异步任务中手动清除 kbList 和 kbDocs 缓存 */
     private void evictKbCache(Long kbId) {
-        try {
-            CacheManager cm = cacheManager;
-            if (cm != null) {
-                // 清除该知识库的文档列表缓存（所有用户的）
-                var docsCache = cm.getCache("kbDocs");
-                if (docsCache != null) docsCache.clear();
-                // 清除知识库列表缓存（所有用户的）
-                var listCache = cm.getCache("kbList");
-                if (listCache != null) listCache.clear();
-            }
-        } catch (Exception e) {
-            log.warn("缓存清除失败: kbId={}", kbId, e);
+        if (cacheManager == null) {
+            log.warn("[缓存] cacheManager 为 null，无法清除缓存: kbId={}", kbId);
+            return;
+        }
+        var docsCache = cacheManager.getCache("kbDocs");
+        if (docsCache != null) {
+            docsCache.clear();
+            log.info("[缓存] kbDocs 缓存已清除: kbId={}", kbId);
+        } else {
+            log.warn("[缓存] kbDocs 缓存不存在: kbId={}", kbId);
+        }
+        var listCache = cacheManager.getCache("kbList");
+        if (listCache != null) {
+            listCache.clear();
+            log.info("[缓存] kbList 缓存已清除: kbId={}", kbId);
         }
     }
 

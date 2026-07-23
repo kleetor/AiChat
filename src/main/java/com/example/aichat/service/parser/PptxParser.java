@@ -18,9 +18,11 @@ import java.nio.file.Path;
 public class PptxParser implements DocumentParser {
 
     private static final Logger log = LoggerFactory.getLogger(PptxParser.class);
+    private static final int MAX_TEXT_LENGTH = 5 * 1024 * 1024;
 
     @Override
     public String parse(Path filePath) throws IOException {
+        log.info("[PPT] 开始解析: {}", filePath.getFileName());
         try (InputStream is = Files.newInputStream(filePath);
              XMLSlideShow ppt = new XMLSlideShow(is)) {
 
@@ -40,9 +42,15 @@ public class PptxParser implements DocumentParser {
                 }
             }
 
-            return sb.toString().trim();
+            String text = sb.toString().trim();
+            if (text.length() > MAX_TEXT_LENGTH) {
+                log.warn("[PPT] 文本过长，截断: {} → {} 字符", text.length(), MAX_TEXT_LENGTH);
+                text = text.substring(0, MAX_TEXT_LENGTH);
+            }
+            log.info("[PPT] 解析完成: {} 字符", text.length());
+            return text;
         } catch (Exception e) {
-            log.error("PPT 解析失败: {}", filePath, e);
+            log.error("[PPT] 解析失败: {}", filePath, e);
             throw new RuntimeException("PPT 解析失败: " + e.getMessage(), e);
         }
     }

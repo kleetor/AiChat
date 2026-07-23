@@ -48,6 +48,13 @@ public class ChromaDBService extends BaseChromaDBService<Long> {
             }
 
             add(uuid, ids, allEmbeddings, texts, metadatas);
+            // 释放大对象
+            allEmbeddings = null;
+            texts = null;
+            ids = null;
+            metadatas = null;
+            System.gc();
+
             log.info("ChromaDB 写入 {} 个分块: kbId={}, uuid={}", chunks.size(), kbId, uuid);
         } catch (Exception e) {
             log.error("ChromaDB add 失败: kbId={}", kbId, e);

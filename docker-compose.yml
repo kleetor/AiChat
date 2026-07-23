@@ -45,6 +45,8 @@ services:
     restart: always
     ports:
       - "8080:8080"
+    mem_limit: 1536m
+    mem_reservation: 512m
     environment:
       DB_PASSWORD: ${DB_PASSWORD:-}
       JWT_SECRET: ${JWT_SECRET:-}

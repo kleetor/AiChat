@@ -49,6 +49,8 @@ public class PdfParser implements DocumentParser {
     private static final long MAX_PAGE_PIXELS = 100_000_000L;
     /** 页级并行阈值：超过此页数启用并行 OCR */
     private static final int PARALLEL_THRESHOLD = 5;
+    /** OCR 渲染 DPI（低于配置 DPI，减少内存占用，Tesseract 对此不敏感） */
+    private static final int OCR_RENDER_DPI = 200;
     /** PDFBox 提取文本有效性的最小有效字符数 */
     private static final int MIN_VALID_CHARS = 10;
     /** PDFBox 提取文本中有效字符的最低占比 */
@@ -95,39 +97,81 @@ public class PdfParser implements DocumentParser {
 
     @Override
     public String parse(Path filePath) throws IOException {
+        long parseStart = System.currentTimeMillis();
         byte[] bytes = Files.readAllBytes(filePath);
-        String pdfHash = imageCacheService.sha256(bytes);
-        try (PDDocument doc = Loader.loadPDF(bytes)) {
-            // 强制 OCR 模式
-            if (Boolean.TRUE.equals(forceOcrFlag.get()) && ocrProps.isEnabled()) {
-                log.info("强制 OCR 模式: {}", filePath.getFileName());
-                return doOcrWithCache(bytes, doc);
-            }
+        String fileName = filePath.getFileName().toString();
+        log.info("[PDF] 开始解析: {} ({}MB), forceOcr={}", fileName, bytes.length / 1024 / 1024, forceOcrFlag.get());
+        logMemory("parse-入口");
 
+        String pdfHash = imageCacheService.sha256(bytes);
+        long pddocStart = System.currentTimeMillis();
+        try (PDDocument doc = Loader.loadPDF(bytes)) {
+            log.info("[PDF] PDDocument 加载完成: {} 页, 耗时{}ms", doc.getNumberOfPages(), System.currentTimeMillis() - pddocStart);
+            logMemory("parse-PDDocument加载后");
+
+            // 强制 OCR 模式：跳过 PDFBox 文字提取，但仍提取嵌入图片做视觉识别
+            if (Boolean.TRUE.equals(forceOcrFlag.get()) && ocrProps.isEnabled()) {
+                log.info("[PDF] 进入强制OCR+图片识别模式: {}", fileName);
+                long ocrStart = System.currentTimeMillis();
+                String text = doOcrWithCache(bytes, doc, true);
+                log.info("[PDF] OCR 阶段完成: {} 字符, 耗时{}ms", text != null ? text.length() : 0, System.currentTimeMillis() - ocrStart);
+                log.debug("[PDF] OCR 文本预览: {}", text != null ? (text.length() > 200 ? text.substring(0, 200) + "..." : text) : "(null)");
+                logMemory("parse-OCR完成后");
+
+                // 提取并识别嵌入图片（视觉 API），与 OCR 文字合并
+                if (pdfImageProps.isEnabled()) {
+                    long imgStart = System.currentTimeMillis();
+                    try {
+                        String imageDescriptions = extractAndRecognizeImages(bytes, pdfHash, doc);
+                        if (!imageDescriptions.isEmpty()) {
+                            text = (text != null ? text : "") + "\n\n" + imageDescriptions;
+                        }
+                        log.info("[PDF] 嵌入图片识别完成: 耗时{}ms", System.currentTimeMillis() - imgStart);
+                        logMemory("parse-图片识别后");
+                    } catch (Exception e) {
+                        log.warn("[PDF] 强制 OCR 模式下图片识别失败，跳过: {}", fileName, e);
+                    }
+                }
+
+                log.info("[PDF] 解析完成: {}, 总文本{}字符, 总耗时{}ms", fileName,
+                        text != null ? text.length() : 0, System.currentTimeMillis() - parseStart);
+                logMemory("parse-退出");
+                return text;
+            }
             // 优先 PDFBox 提取
+            long extractStart = System.currentTimeMillis();
             String text = extractText(doc);
+            log.info("[PDF] PDFBox 文字提取: {} 字符, 耗时{}ms", text != null ? text.length() : 0, System.currentTimeMillis() - extractStart);
 
             // 提取并识别嵌入图片（P0: 文字有效的 PDF 才做图片识别）
             if (pdfImageProps.isEnabled() && text != null && !text.isBlank()) {
                 try {
+                    long imgStart = System.currentTimeMillis();
                     String imageDescriptions = extractAndRecognizeImages(bytes, pdfHash, doc);
                     if (!imageDescriptions.isEmpty()) {
                         text = text + "\n\n" + imageDescriptions;
                     }
+                    log.info("[PDF] 嵌入图片识别完成: 耗时{}ms", System.currentTimeMillis() - imgStart);
                 } catch (Exception e) {
-                    log.warn("PDF 图片识别失败，跳过: {}", filePath.getFileName(), e);
+                    log.warn("[PDF] 图片识别失败，跳过: {}", fileName, e);
                 }
             }
 
             // 文本无效则回退 OCR
             if (!isTextValid(text) && ocrProps.isEnabled()) {
-                log.info("PDFBox 提取无效，回退 OCR: {}", filePath.getFileName());
-                text = doOcrWithCache(bytes, doc);
+                log.info("[PDF] PDFBox 提取无效，回退 OCR: {}", fileName);
+                long ocrStart = System.currentTimeMillis();
+                text = doOcrWithCache(bytes, doc, false);
+                log.info("[PDF] OCR 回退完成: {} 字符, 耗时{}ms", text != null ? text.length() : 0, System.currentTimeMillis() - ocrStart);
+                logMemory("parse-OCR回退后");
             }
 
+            log.info("[PDF] 解析完成: {}, 总文本{}字符, 总耗时{}ms", fileName,
+                    text != null ? text.length() : 0, System.currentTimeMillis() - parseStart);
+            logMemory("parse-退出");
             return text;
         } catch (IOException e) {
-            log.error("PDF 解析失败: {}", filePath.getFileName(), e);
+            log.error("[PDF] 解析失败: {}", fileName, e);
             throw new RuntimeException("PDF 解析失败: " + e.getMessage(), e);
         } finally {
             forceOcrFlag.remove();
@@ -141,27 +185,32 @@ public class PdfParser implements DocumentParser {
      */
     private String extractAndRecognizeImages(byte[] pdfBytes, String pdfHash, PDDocument doc) {
         // 1. 提取图片
+        long extractStart = System.currentTimeMillis();
         List<ImageInfo> images = extractImages(doc);
-        if (images.isEmpty()) return "";
-
-        log.debug("PDF 提取到 {} 张原始嵌入图片", images.size());
-
-        // 2. 过滤
-        images = filterImages(images);
         if (images.isEmpty()) {
-            log.debug("PDF 嵌入图片全部被过滤");
+            log.info("[图片] 未提取到嵌入图片");
             return "";
         }
 
+        log.info("[图片] 提取到 {} 张原始嵌入图片, 耗时{}ms", images.size(), System.currentTimeMillis() - extractStart);
+        logMemory("图片-提取后");
+
+        // 2. 过滤
+        images = filterImages(images);
+        log.info("[图片] 过滤后保留 {} 张有效图片", images.size());
+        if (images.isEmpty()) return "";
+
         // 3. 限制数量
         if (images.size() > pdfImageProps.getMaxImagesPerDoc()) {
-            log.info("PDF 图片数 {} 超过上限 {}，截取前 {} 张",
+            log.info("[图片] 数量 {} 超过上限 {}，截取前 {} 张",
                     images.size(), pdfImageProps.getMaxImagesPerDoc(), pdfImageProps.getMaxImagesPerDoc());
             images = images.subList(0, pdfImageProps.getMaxImagesPerDoc());
         }
 
         // 4. 识别（含缓存）
+        long recognizeStart = System.currentTimeMillis();
         Map<Integer, String> descriptions = recognizeImages(pdfHash, images);
+        log.info("[图片] 视觉API识别完成: {} 张识别成功, 耗时{}ms", descriptions.size(), System.currentTimeMillis() - recognizeStart);
 
         // 5. 格式化输出
         return formatImageDescriptions(descriptions);
@@ -408,19 +457,28 @@ public class PdfParser implements DocumentParser {
 
     // ---- OCR 回退（含缓存） ----
 
-    /** OCR 入口：先查缓存，未命中则执行 OCR 并缓存结果。 */
-    private String doOcrWithCache(byte[] pdfBytes, PDDocument doc) {
-        // 先查缓存
-        Optional<String> cached = cacheService.get(pdfBytes);
-        if (cached.isPresent()) {
-            log.info("OCR 缓存命中");
-            return cached.get();
+    /** OCR 入口：先查缓存，未命中则执行 OCR 并缓存结果。forceOcr=true 时跳过缓存。 */
+    private String doOcrWithCache(byte[] pdfBytes, PDDocument doc, boolean forceOcr) {
+        if (!forceOcr) {
+            Optional<String> cached = cacheService.get(pdfBytes);
+            if (cached.isPresent()) {
+                log.info("[OCR] 缓存命中，跳过识别 ({} 字符)", cached.get().length());
+                return cached.get();
+            }
+        } else {
+            log.info("[OCR] 强制模式，跳过缓存检查");
         }
 
-        String result = ocrWithTimeout(pdfBytes, doc.getNumberOfPages());
+        log.info("[OCR] 缓存未命中，开始识别: {} 页, {} DPI", doc.getNumberOfPages(), OCR_RENDER_DPI);
+        logMemory("OCR-开始前");
+        long ocrStart = System.currentTimeMillis();
+
+        String result = ocrWithTimeout(pdfBytes, doc);
         if (!result.isBlank()) {
             cacheService.put(pdfBytes, result);
         }
+        log.info("[OCR] 识别完成: {} 字符, 总耗时{}ms", result.length(), System.currentTimeMillis() - ocrStart);
+        logMemory("OCR-完成后");
         return result;
     }
 
@@ -428,14 +486,15 @@ public class PdfParser implements DocumentParser {
      * 带超时的 OCR 识别。
      * @throws OcrFailedException 超时、异常或结果为空
      */
-    private String ocrWithTimeout(byte[] pdfBytes, int pages) {
+    private String ocrWithTimeout(byte[] pdfBytes, PDDocument doc) {
+        int pages = doc.getNumberOfPages();
         if (pages > MAX_PAGES) {
             throw OcrFailedException.of("PDF", "页数 " + pages + " 超过上限 " + MAX_PAGES);
         }
 
         // 长文档页级并行，短文档顺序处理
         Future<String> future = ocrExecutor.submit(() ->
-                pages >= PARALLEL_THRESHOLD ? doOcrParallel(pdfBytes, pages) : doOcr(pdfBytes, pages));
+                pages >= PARALLEL_THRESHOLD ? doOcrParallel(doc, pages) : doOcr(doc, pages));
 
         try {
             String result = future.get(ocrProps.getTimeoutSeconds(), TimeUnit.SECONDS);
@@ -458,88 +517,112 @@ public class PdfParser implements DocumentParser {
 
     // ---- 顺序 OCR（短文档） ----
 
-    private String doOcr(byte[] pdfBytes, int totalPages) {
+    private String doOcr(PDDocument doc, int totalPages) {
         StringBuilder sb = new StringBuilder();
-        try (PDDocument doc = Loader.loadPDF(pdfBytes)) {
-            PDFRenderer renderer = new PDFRenderer(doc);
-            tesseract.setVariable("user_defined_dpi", String.valueOf(ocrProps.getDpi()));
+        PDFRenderer renderer = new PDFRenderer(doc);
+        tesseract.setVariable("user_defined_dpi", String.valueOf(OCR_RENDER_DPI));
+        log.info("[OCR] 顺序模式开始: {} 页", totalPages);
 
-            for (int i = 0; i < totalPages; i++) {
-                BufferedImage image = renderer.renderImageWithDPI(i, ocrProps.getDpi());
+        for (int i = 0; i < totalPages; i++) {
+            long pageStart = System.currentTimeMillis();
+            try {
+                BufferedImage image = renderer.renderImageWithDPI(i, OCR_RENDER_DPI);
                 try {
-                    // 像素上限检查：防止解压炸弹
                     long pixels = (long) image.getWidth() * image.getHeight();
                     if (pixels > MAX_PAGE_PIXELS) {
-                        log.warn("第 {} 页像素数 {} 超过上限，跳过", i + 1, pixels);
+                        log.warn("[OCR] 第 {} 页像素数 {} 超过上限，跳过", i + 1, pixels);
                         continue;
                     }
+                    long prepStart = System.currentTimeMillis();
                     BufferedImage processed = preprocessor.preprocess(image);
+                    long prepTime = System.currentTimeMillis() - prepStart;
+
+                    long tessStart = System.currentTimeMillis();
                     String pageText = tesseract.doOCR(processed);
+                    long tessTime = System.currentTimeMillis() - tessStart;
+
                     pageText = postProcessor.postProcess(pageText);
                     sb.append(pageText).append("\n");
                     processed.flush();
+
+                    log.debug("[OCR] 第{}/{}页: {}x{}px, 预处理{}ms, tesseract{}ms, 文字{}字, 总{}ms",
+                            i + 1, totalPages, image.getWidth(), image.getHeight(),
+                            prepTime, tessTime, pageText.length(), System.currentTimeMillis() - pageStart);
+                } catch (TesseractException e) {
+                    log.error("[OCR] 第 {} 页 OCR 失败: {}", i + 1, e.getMessage());
                 } finally {
                     image.flush();
                 }
+            } catch (IOException e) {
+                log.error("[OCR] 第 {} 页渲染失败: {}", i + 1, e.getMessage());
             }
-        } catch (IOException | TesseractException e) {
-            throw OcrFailedException.of("PDF", e.getMessage());
+            if (i > 0 && i % 3 == 0) {
+                System.gc();
+            }
         }
+        System.gc();
         log.info("OCR 识别完成: {} 页, {} 字符", totalPages, sb.length());
         return sb.toString();
     }
 
     // ---- 页级并行 OCR（长文档，>= 5 页） ----
 
-    private String doOcrParallel(byte[] pdfBytes, int totalPages) {
-        try (PDDocument doc = Loader.loadPDF(pdfBytes)) {
-            PDFRenderer renderer = new PDFRenderer(doc);
-            tesseract.setVariable("user_defined_dpi", String.valueOf(ocrProps.getDpi()));
+    private String doOcrParallel(PDDocument doc, int totalPages) {
+        int threads = Math.min(2, Runtime.getRuntime().availableProcessors());
+        log.info("[OCR] 并行模式开始: {} 页, {} 线程", totalPages, threads);
+        logMemory("OCR并行-开始前");
 
-            List<CompletableFuture<IndexedPage>> futures = new ArrayList<>();
-            for (int i = 0; i < totalPages; i++) {
-                final int pageIdx = i;
-                futures.add(CompletableFuture.supplyAsync(() -> {
-                    try {
-                        BufferedImage image = renderer.renderImageWithDPI(pageIdx, ocrProps.getDpi());
-                        try {
-                            long pixels = (long) image.getWidth() * image.getHeight();
-                            if (pixels > MAX_PAGE_PIXELS) {
-                                log.warn("第 {} 页像素数 {} 超过上限，跳过", pageIdx + 1, pixels);
-                                return new IndexedPage(pageIdx, "");
-                            }
-                            BufferedImage processed = preprocessor.preprocess(image);
-                            String text = tesseract.doOCR(processed);
-                            text = postProcessor.postProcess(text);
-                            processed.flush();
-                            return new IndexedPage(pageIdx, text);
-                        } finally {
-                            image.flush();
-                        }
-                    } catch (IOException | TesseractException e) {
-                        log.error("第 {} 页 OCR 失败: {}", pageIdx + 1, e.getMessage());
-                        return new IndexedPage(pageIdx, "");
-                    }
-                }, ocrExecutor));
-            }
-
-            // 按页码排序聚合
-            String[] pages = new String[totalPages];
-            for (var f : futures) {
+        ExecutorService parallelExecutor = Executors.newFixedThreadPool(threads);
+        List<CompletableFuture<IndexedPage>> futures = new ArrayList<>();
+        for (int i = 0; i < totalPages; i++) {
+            final int pageIdx = i;
+            futures.add(CompletableFuture.supplyAsync(() -> {
+                long pageStart = System.currentTimeMillis();
+                // 每个任务创建独立的 PDFRenderer，保证线程安全
+                PDFRenderer renderer = new PDFRenderer(doc);
                 try {
-                    IndexedPage ip = f.get(ocrProps.getTimeoutSeconds(), TimeUnit.SECONDS);
-                    pages[ip.index] = ip.text;
-                } catch (Exception e) {
-                    log.warn("并行 OCR 聚合异常: {}", e.getMessage());
+                    BufferedImage image = renderer.renderImageWithDPI(pageIdx, OCR_RENDER_DPI);
+                    try {
+                        long pixels = (long) image.getWidth() * image.getHeight();
+                        if (pixels > MAX_PAGE_PIXELS) {
+                            log.warn("[OCR] 第 {} 页像素数 {} 超过上限，跳过", pageIdx + 1, pixels);
+                            return new IndexedPage(pageIdx, "");
+                        }
+                        BufferedImage processed = preprocessor.preprocess(image);
+                        String text = tesseract.doOCR(processed);
+                        text = postProcessor.postProcess(text);
+                        processed.flush();
+                        log.debug("[OCR] 第{}/{}页完成: {}x{}px, {}字, {}ms",
+                                pageIdx + 1, totalPages, image.getWidth(), image.getHeight(),
+                                text.length(), System.currentTimeMillis() - pageStart);
+                        return new IndexedPage(pageIdx, text);
+                    } finally {
+                        image.flush();
+                    }
+                } catch (IOException | TesseractException e) {
+                    log.error("[OCR] 第 {} 页 OCR 失败: {}", pageIdx + 1, e.getMessage());
+                    return new IndexedPage(pageIdx, "");
                 }
-            }
-
-            String result = String.join("\n", pages);
-            log.info("并行 OCR 完成: {} 页, {} 字符", totalPages, result.length());
-            return result;
-        } catch (IOException e) {
-            throw OcrFailedException.of("PDF", e.getMessage());
+            }, parallelExecutor));
         }
+
+        // 按页码排序聚合
+        String[] pages = new String[totalPages];
+        for (var f : futures) {
+            try {
+                IndexedPage ip = f.get(ocrProps.getTimeoutSeconds(), TimeUnit.SECONDS);
+                pages[ip.index] = ip.text;
+            } catch (Exception e) {
+                log.warn("[OCR] 并行聚合异常: {}", e.getMessage());
+            }
+        }
+        parallelExecutor.shutdown();
+
+        String result = String.join("\n", pages);
+        System.gc();
+        log.info("[OCR] 并行完成: {} 页, {} 字符", totalPages, result.length());
+        logMemory("OCR并行-完成后");
+        return result;
     }
 
     private record IndexedPage(int index, String text) {}
@@ -560,6 +643,16 @@ public class PdfParser implements DocumentParser {
     }
 
     // ---- 工具 ----
+
+    /** 打印当前 JVM 堆内存使用情况（用于追踪 OOM 问题） */
+    private static void logMemory(String label) {
+        Runtime rt = Runtime.getRuntime();
+        long used = (rt.totalMemory() - rt.freeMemory()) / 1024 / 1024;
+        long max = rt.maxMemory() / 1024 / 1024;
+        long total = rt.totalMemory() / 1024 / 1024;
+        log.info("[MEM] {} used={}MB total={}MB max={}MB ({}%)",
+                label, used, total, max, max > 0 ? used * 100 / max : 0);
+    }
 
     /**
      * 判断 PDFBox 提取的文本是否有效。

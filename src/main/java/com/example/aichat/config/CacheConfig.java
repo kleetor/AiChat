@@ -48,7 +48,7 @@ public class CacheConfig {
                         .build());
         manager.registerCustomCache("kbDocs",
                 Caffeine.newBuilder()
-                        .expireAfterWrite(3, TimeUnit.MINUTES)
+                        .expireAfterWrite(30, TimeUnit.SECONDS)
                         .maximumSize(100)
                         .recordStats()
                         .build());
