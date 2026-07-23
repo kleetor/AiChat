@@ -62,11 +62,10 @@ public class KnowledgeBaseController {
     @PostMapping("/{kbId}/docs/upload")
     public ResponseEntity<?> uploadDocument(@PathVariable Long kbId,
                                              @RequestParam("file") MultipartFile file,
-                                             @RequestParam(value = "forceOcr", defaultValue = "false") boolean forceOcr,
                                              Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
         try {
-            KbDocument doc = kbService.uploadDocument(kbId, userId, file, forceOcr);
+            KbDocument doc = kbService.uploadDocument(kbId, userId, file);
             return ResponseEntity.ok(doc);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

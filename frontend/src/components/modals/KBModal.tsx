@@ -29,9 +29,6 @@ export default function KBModal({ open, onClose }: KBModalProps) {
   const [currentKb, setCurrentKb] = useState<KnowledgeBase | null>(null);
   const [docs, setDocs] = useState<KbDocument[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // 上传级 OCR 选项
-  const [forceOcr, setForceOcr] = useState(false);
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (open) loadKBs();
@@ -87,26 +84,12 @@ export default function KBModal({ open, onClose }: KBModalProps) {
 
   const goBack = () => { setCurrentKb(null); setDocs([]); if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !currentKb) return;
-    // 仅 PDF 显示强制 OCR 确认栏
-    if (file.name.toLowerCase().endsWith(".pdf")) {
-      setPendingFile(file);
-    } else {
-      doUpload(file, false);
-    }
+    try { await uploadKBDocument(currentKb.id, file); loadDocs(currentKb.id); } catch { /* ignore */ }
     e.target.value = "";
   };
-
-  const doUpload = async (file: File, force: boolean) => {
-    if (!currentKb) return;
-    try { await uploadKBDocument(currentKb.id, file, force); loadDocs(currentKb.id); } catch { /* ignore */ }
-    setPendingFile(null);
-    setForceOcr(false);
-  };
-
-  const cancelUpload = () => { setPendingFile(null); setForceOcr(false); };
 
   const delDoc = async (id: number) => {
     if (!confirm("确定删除此文档？")) return;
@@ -190,39 +173,13 @@ export default function KBModal({ open, onClose }: KBModalProps) {
                 </div>
               ))}
             </div>
-            <div className="p-4 border-t border-border shrink-0 space-y-2">
-              {/* 强制 OCR 确认栏 — 仅选择 PDF 时显示 */}
-              {pendingFile && (
-                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs">
-                  <span className="text-amber-800 truncate flex-1 mr-2">
-                    已选择 <strong>{pendingFile.name}</strong>
-                  </span>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <label className="flex items-center gap-1 cursor-pointer select-none">
-                      <input type="checkbox" checked={forceOcr} onChange={e => setForceOcr(e.target.checked)}
-                        className="w-3.5 h-3.5 rounded accent-amber-600" />
-                      <span className="text-amber-700 whitespace-nowrap">强制 OCR（扫描件）</span>
-                    </label>
-                    <button onClick={() => doUpload(pendingFile, forceOcr)}
-                      className="px-3 py-1 rounded-md bg-amber-600 text-white text-xs font-medium hover:bg-amber-700 transition-colors">
-                      上传
-                    </button>
-                    <button onClick={cancelUpload}
-                      className="px-2 py-1 text-amber-600 hover:text-amber-800 transition-colors">
-                      取消
-                    </button>
-                  </div>
-                </div>
-              )}
-              {/* 上传按钮 — 无 pending 时显示 */}
-              {!pendingFile && (
-                <label className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-border text-xs text-muted-foreground cursor-pointer hover:border-primary/50 hover:text-primary transition-colors">
-                  <Upload size={14} />上传文档 (TXT / MD / PDF / DOCX)
-                  <input type="file"
-                    accept=".txt,.md,.pdf,.docx"
-                    className="hidden" onChange={handleFileSelect} />
-                </label>
-              )}
+            <div className="p-4 border-t border-border shrink-0">
+              <label className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-border text-xs text-muted-foreground cursor-pointer hover:border-primary/50 hover:text-primary transition-colors">
+                <Upload size={14} />上传文档 (TXT / MD / PDF / DOCX)
+                <input type="file"
+                  accept=".txt,.md,.pdf,.docx"
+                  className="hidden" onChange={handleFileSelect} />
+              </label>
             </div>
           </>
         )}

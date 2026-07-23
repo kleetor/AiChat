@@ -245,10 +245,9 @@ export function getKBDocuments(kbId: number): Promise<KbDocument[]> {
   return apiGet(`/api/kb/${kbId}/docs`);
 }
 
-export function uploadKBDocument(kbId: number, file: File, forceOcr?: boolean): Promise<KbDocument> {
+export function uploadKBDocument(kbId: number, file: File): Promise<KbDocument> {
   const fd = new FormData();
   fd.append("file", file);
-  if (forceOcr) fd.append("forceOcr", "true");
   return apiPostForm(`/api/kb/${kbId}/docs/upload`, fd);
 }
 

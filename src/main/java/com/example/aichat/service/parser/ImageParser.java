@@ -22,7 +22,7 @@ import java.util.Set;
  * 图片解析器：使用 Tesseract OCR 识别图片中的文字。
  * 支持 jpg / jpeg / png / tiff / tif / bmp 格式。
  */
-@Component
+// @Component — 前端仅开放 TXT/MD/PDF/DOCX，图片格式暂时隐藏
 public class ImageParser implements DocumentParser {
 
     private static final Logger log = LoggerFactory.getLogger(ImageParser.class);

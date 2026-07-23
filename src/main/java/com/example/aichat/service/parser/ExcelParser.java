@@ -12,7 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /** Excel (.xlsx) 解析器，每个 Sheet 转为 Markdown 表格 */
-@Component
+// @Component — 前端仅开放 TXT/MD/PDF/DOCX，Excel 格式暂时隐藏
 public class ExcelParser implements DocumentParser {
 
     private static final Logger log = LoggerFactory.getLogger(ExcelParser.class);

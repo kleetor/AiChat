@@ -176,7 +176,7 @@ FULL (清晰期) ──3天未访问──→ BRIEF (模糊期)
 
 | 维度 | 能力 |
 |------|------|
-| 文档解析 | 14 种格式：txt / md / pdf / docx / xlsx / pptx / html / csv + jpg / jpeg / png / tiff / tif / bmp |
+| 文档解析 | 后端支持 14 种格式，前端开放 4 种：TXT / MD / PDF / DOCX |
 | OCR 识别 | Tesseract 5.x + 图像预处理（灰度→二值化→降噪→倾斜校正）+ SHA-256 缓存 + 页级并行 |
 | **PDF 图片识别** | **PDImageXObject 提取→四重过滤→Base64 视觉 API→描述拼入文本** |
 | 分块策略 | 递归语义分割 + 按知识库可调 chunk_size / overlap |
@@ -184,28 +184,28 @@ FULL (清晰期) ──3天未访问──→ BRIEF (模糊期)
 | 关键词索引 | Lucene BM25（SmartChineseAnalyzer），每 KB 独立索引目录 |
 | 查询优化 | LLM 查询重写（2-3 变体）+ 多查询并行召回 + 跨查询 RRF 融合 |
 | 结果注入 | 可自定义 Prompt 模板，支持 `{context}` / `{query}` 占位符 |
-| 缓存 | Caffeine：kbList(3min) + kbDocs(3min) |
+| 缓存 | Caffeine：kbList + kbDocs，`@CacheEvict(beforeInvocation=true)` + 事务后手动清除，消除竞态窗口 |
 
 ### 3.3 文档处理管道
 
 ```
 POST /api/kb/{kbId}/docs/upload
-  │
+  │  （前端限制 accept=".txt,.md,.pdf,.docx"）
   ├─ 权限校验 + Magic Bytes 校验 + 配额检查
   ├─ 路径穿越防护 + 20MB 上限
-  ├─ MySQL 写入 KbDocument (status=PROCESSING)
+  ├─ MySQL 写入 KbDocument (status=PROCESSING)  ← TransactionTemplate 提前提交
   │
   └─ 异步处理 processDocument():
        │
-       ├─ ① 文档解析（DocumentParser 工厂）
+       ├─ ① 文档解析（DocumentParser 工厂，后端保留全 14 种格式支持）
        │      ├─ PdfParser → PDFBox 文字层
        │      │             → 嵌入图片提取 + 视觉 API 识别  ★ NEW
        │      │             → 无效 → Tesseract OCR 回退（含缓存+预处理）
-       │      ├─ ImageParser → ImageIO + OCR
+       │      ├─ ImageParser → ImageIO + OCR（后端保留，前端不开放）
        │      ├─ DocxParser → Apache POI
-       │      ├─ ExcelParser → Markdown 表格
-       │      ├─ PptxParser → 幻灯片文本
-       │      ├─ HtmlParser → Jsoup 去标签
+       │      ├─ ExcelParser → Markdown 表格（后端保留）
+       │      ├─ PptxParser → 幻灯片文本（后端保留）
+       │      ├─ HtmlParser → Jsoup 去标签（后端保留）
        │      └─ TxtParser → UTF-8 直接读取
        │
        ├─ ② 智能分块（ChunkingService）
@@ -218,7 +218,8 @@ POST /api/kb/{kbId}/docs/upload
        │      ├─ ChromaDB：SiliconFlow Embedding → Collection
        │      └─ Lucene BM25：分词索引写入 ./data/bm25-kb/{kbId}/
        │
-       └─ ④ 状态更新 + 缓存刷新
+       └─ ④ 状态更新 (READY) + 事务提交后 evictKbCache() 清除缓存
+              ↑ 缓存清除在事务外部执行，消除竞态窗口
 ```
 
 ### 3.4 PDF 图片视觉识别流程
@@ -296,7 +297,7 @@ PdfParser.parse()
 
 | 评分维度 | HanaChat 改造后 | Dify | RAGFlow | FastGPT |
 |----------|:---:|:---:|:---:|:---:|
-| 文档格式支持 | ⭐⭐⭐⭐⭐ 14种 | ⭐⭐⭐⭐⭐ 10+ | ⭐⭐⭐⭐⭐ 10+ | ⭐⭐⭐⭐ 6+ |
+| 文档格式支持 | ⭐⭐⭐⭐ 后端14/前端4 | ⭐⭐⭐⭐⭐ 10+ | ⭐⭐⭐⭐⭐ 10+ | ⭐⭐⭐⭐ 6+ |
 | 检索精度（混合+重排） | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
 | 查询优化（重写+多查） | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ |
 | 可配置性（分块+模板） | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
@@ -318,7 +319,7 @@ PdfParser.parse()
 
 | 文件 | 职责 | 行数 |
 |------|------|------|
-| `KnowledgeBaseService.java` | CRUD + 上传 + 异步处理 + 配额 + Magic Bytes | ~460 |
+| `KnowledgeBaseService.java` | CRUD + 上传 + 异步处理 + 配额 + Magic Bytes + 缓存竞态修复 | ~477 |
 | `PdfParser.java` | PDF 解析 + 图片提取 + 视觉识别 + OCR + 像素限制 | ~580 |
 | `ImageService.java` | S3 上传 + Base64 视觉 API | ~245 |
 | `PdfImageCacheService.java` | 图片识别 SHA-256 缓存 | ~85 |
@@ -513,7 +514,7 @@ memory.search.top-k=10
 |----------|:---:|:---:|:---:|------|
 | 记忆建模 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | 四模式+三态衰减领先 |
 | 知识图谱 | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | 六项优化覆盖核心场景 |
-| 文档解析 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | 14种格式+OCR+图片识别 |
+| 文档解析 | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | 后端14种/前端4种+OCR+图片识别 |
 | 检索精度 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | 混合+Rerank+重写 顶级 |
 | PDF 处理 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | OCR+表格+图片识别 全面 |
 | 安全防护 | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | 23项风险全修 自研顶级 |

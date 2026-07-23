@@ -13,7 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /** HTML 解析器，去除标签保留纯文本 */
-@Component
+// @Component — 前端仅开放 TXT/MD/PDF/DOCX，HTML 格式暂时隐藏
 public class HtmlParser implements DocumentParser {
 
     private static final Logger log = LoggerFactory.getLogger(HtmlParser.class);

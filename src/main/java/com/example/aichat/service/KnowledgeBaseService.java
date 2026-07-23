@@ -48,8 +48,6 @@ public class KnowledgeBaseService {
     private static final int MAX_DOCS_PER_USER = 1000;
     /** 单用户最大存储占用（500MB） */
     private static final long MAX_STORAGE_PER_USER = 500L * 1024 * 1024;
-    /** 上传级强制 OCR 标志：docId → forceOcr */
-    private final ConcurrentHashMap<Long, Boolean> forceOcrFlags = new ConcurrentHashMap<>();
 
     /** 异步文档处理线程池（有界队列，防止任务积压耗尽内存） */
     private final ExecutorService processExecutor = new ThreadPoolExecutor(
@@ -57,14 +55,15 @@ public class KnowledgeBaseService {
             new LinkedBlockingQueue<>(20),
             new ThreadPoolExecutor.CallerRunsPolicy());
 
-    /** 文件头 Magic Bytes 校验：扩展名 → 预期文件头 */
+    /** 文件头 Magic Bytes 校验：扩展名 → 预期文件头（仅保留前端开放的 4 种格式） */
     private static final Map<String, byte[]> MAGIC_BYTES = Map.of(
             "pdf", new byte[]{0x25, 0x50, 0x44, 0x46},               // %PDF
-            "docx", new byte[]{0x50, 0x4B, 0x03, 0x04},              // PK..
-            "xlsx", new byte[]{0x50, 0x4B, 0x03, 0x04},              // PK..
-            "pptx", new byte[]{0x50, 0x4B, 0x03, 0x04},              // PK..
-            "png", new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47},        // .PNG
-            "jpg", new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF} // ..Ø.
+            "docx", new byte[]{0x50, 0x4B, 0x03, 0x04}               // PK..
+            // 以下格式暂不开放（前端仅 TXT/MD/PDF/DOCX）：
+            // "xlsx", new byte[]{0x50, 0x4B, 0x03, 0x04},           // PK..
+            // "pptx", new byte[]{0x50, 0x4B, 0x03, 0x04},           // PK..
+            // "png", new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47},     // .PNG
+            // "jpg", new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF} // ..Ø.
     );
 
     public KnowledgeBaseService(KnowledgeBaseRepository kbRepo,
@@ -174,7 +173,7 @@ public class KnowledgeBaseService {
         @CacheEvict(value = "kbList", key = "#userId", beforeInvocation = true),
         @CacheEvict(value = "kbDocs", key = "#userId + '_' + #kbId", beforeInvocation = true)
     })
-    public KbDocument uploadDocument(Long kbId, Long userId, MultipartFile file, boolean forceOcr) throws IOException {
+    public KbDocument uploadDocument(Long kbId, Long userId, MultipartFile file) throws IOException {
         KnowledgeBase kb = kbRepo.findById(kbId)
                 .orElseThrow(() -> BusinessException.notFound("知识库不存在"));
         if (!kb.getUserId().equals(userId)) {
@@ -207,12 +206,6 @@ public class KnowledgeBaseService {
                         .fileSize(file.getSize()).s3Key(storedName)
                         .status("PROCESSING").build())
         );
-
-        // 存储上传级 OCR 配置
-        if (forceOcr && "pdf".equals(fileType)) {
-            forceOcrFlags.put(doc.getId(), true);
-            log.info("文档 {} 启用强制 OCR 模式", doc.getId());
-        }
 
         // 异步处理（只传 docId，避免游离实体冲突）
         final Long docId = doc.getId();
@@ -301,9 +294,6 @@ public class KnowledgeBaseService {
         final Long[] kbIdHolder = new Long[1];
         final boolean[] success = {false};
 
-        // 读取并清除上传级 OCR 标志
-        final Boolean forceOcr = forceOcrFlags.remove(docId);
-
         transactionTemplate.executeWithoutResult(status -> {
             KbDocument doc = docRepo.findById(docId).orElse(null);
             if (doc == null) {
@@ -313,10 +303,6 @@ public class KnowledgeBaseService {
             kbIdHolder[0] = doc.getKbId();
 
             try {
-                // 对 PDF 设置强制 OCR 标志
-                if (Boolean.TRUE.equals(forceOcr) && "pdf".equals(doc.getFileType())) {
-                    setPdfForceOcr(true);
-                }
                 String text = parseDocument(filePath, doc.getFileType());
                 // 读取知识库级别的分块配置
                 KnowledgeBase kb = kbRepo.findById(doc.getKbId()).orElse(null);
@@ -407,30 +393,21 @@ public class KnowledgeBaseService {
         throw new RuntimeException("不支持的文件类型: " + fileType);
     }
 
-    /** 为当前线程的 PdfParser 设置强制 OCR 标志 */
-    private void setPdfForceOcr(boolean force) {
-        for (var p : parsers) {
-            if (p instanceof PdfParser) {
-                ((PdfParser) p).setForceOcrForCurrentThread(force);
-                return;
-            }
-        }
-    }
-
     private String getFileType(String fileName) {
         String lower = fileName.toLowerCase();
+        // 前端仅开放 TXT / MD / PDF / DOCX 四种格式
         if (lower.endsWith(".pdf")) return "pdf";
         if (lower.endsWith(".docx")) return "docx";
-        if (lower.endsWith(".xlsx")) return "xlsx";
-        if (lower.endsWith(".pptx")) return "pptx";
-        if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
-        if (lower.endsWith(".txt")) return "txt";
+        if (lower.endsWith(".txt") || lower.endsWith(".csv")) return "txt"; // CSV 按文本处理
         if (lower.endsWith(".md")) return "md";
-        if (lower.endsWith(".csv")) return "txt"; // CSV 按文本处理
-        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "jpg";
-        if (lower.endsWith(".png")) return "png";
-        if (lower.endsWith(".tiff") || lower.endsWith(".tif")) return "tiff";
-        if (lower.endsWith(".bmp")) return "bmp";
+        // 以下格式暂不开放，前端已限制 accept=".txt,.md,.pdf,.docx"：
+        // if (lower.endsWith(".xlsx")) return "xlsx";
+        // if (lower.endsWith(".pptx")) return "pptx";
+        // if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
+        // if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "jpg";
+        // if (lower.endsWith(".png")) return "png";
+        // if (lower.endsWith(".tiff") || lower.endsWith(".tif")) return "tiff";
+        // if (lower.endsWith(".bmp")) return "bmp";
         return "txt";
     }
 

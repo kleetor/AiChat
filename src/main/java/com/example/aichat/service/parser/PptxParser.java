@@ -14,7 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /** PPT (.pptx) 解析器，按幻灯片提取文本 */
-@Component
+// @Component — 前端仅开放 TXT/MD/PDF/DOCX，PPT 格式暂时隐藏
 public class PptxParser implements DocumentParser {
 
     private static final Logger log = LoggerFactory.getLogger(PptxParser.class);
