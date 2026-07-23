@@ -1,5 +1,6 @@
 package com.example.aichat.controller;
 
+import com.example.aichat.config.BusinessException;
 import com.example.aichat.dto.KnowledgeBaseRequest;
 import com.example.aichat.model.KbDocument;
 import com.example.aichat.model.KnowledgeBase;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
+import java.io.IOException;
 
 @RestController
 @RequestMapping("/api/kb")
@@ -67,8 +69,8 @@ public class KnowledgeBaseController {
         try {
             KbDocument doc = kbService.uploadDocument(kbId, userId, file);
             return ResponseEntity.ok(doc);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (IOException e) {
+            throw BusinessException.badRequest("文件上传失败: " + e.getMessage());
         }
     }
 

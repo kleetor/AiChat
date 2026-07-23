@@ -1,13 +1,15 @@
 # Plans5.0 阶段汇总
 
 > 日期：2026-07-23
-> 测试状态：50 tests, 0 failures, BUILD SUCCESS
+> 测试状态：编译通过，测试全部通过
 
 ---
 
 ## 一、阶段涵盖范围
 
 Plans5.0 聚焦两大系统：**RAG 知识库** 与 **长期记忆系统**，包含功能增强、安全加固、架构优化。
+
+> **7/23 重大调整**：经实测评估，PDF/DOCX 解析无法满足项目质量要求，已全链路移除。知识库当前仅支持纯文本格式 **TXT / MD**。
 
 ---
 
@@ -19,53 +21,64 @@ Plans5.0 聚焦两大系统：**RAG 知识库** 与 **长期记忆系统**，包
 |--------|------|------|
 | P0 | 混合检索（向量 + BM25）→ RRF 融合 → Rerank 精排 | ✅ |
 | P0 | 知识库级 Prompt 模板可配置（`{context}` / `{query}` 占位符） | ✅ |
-| P1 | 文档格式扩展至 8 种（PDF/DOCX/XLSX/PPTX/HTML/TXT/MD/图片） | ✅ |
 | P1 | LLM 查询重写（Query Rewriter） | ✅ |
 | P1 | 可配置分块策略（chunk_size / overlap 知识库级） | ✅ |
-| P1.5 | Tesseract OCR 集成 — 扫描件 PDF 自动识别 | ✅ |
-| — | OCR 优化方案（12 项中实施核心项，删减 6 项边缘场景） | ✅ |
-| **P0 新** | **PDF 嵌入图片视觉识别** — PDImageXObject 提取 → 过滤 → 视觉 API 描述 → 拼入文本 | ✅ |
 
-### 2.2 PDF 图片视觉识别架构
+### 2.2 已废弃功能（7/23 移除）
 
-```
-文字层 PDF → PDFBox 提取文字
-           → 提取嵌入图片 (PDResources → PDImageXObject)
-           → 四重过滤 (尺寸/宽高比/纯色/哈希去重)
-           → 并行视觉 API 识别 (Base64, 4线程)
-           → SHA-256 缓存 (PdfImageCacheService)
-           → 格式化为描述文本拼入
-           → 文字无效 → Tesseract OCR 回退
-```
+| 原功能 | 废弃原因 |
+|--------|---------|
+| 多格式支持（PDF/DOCX/XLSX/PPTX/HTML/图片） | 实测解析质量不达标 |
+| Tesseract OCR 集成 | 依赖 PDF 支持 |
+| PDF 嵌入图片视觉识别 | 依赖 PDF 支持 |
+| 图片视觉模型分类管线 | 依赖 PDF 支持 |
+| forceOcr 强制扫描件开关 | 管线已无需手动干预 |
+| Magic Bytes 校验 | 纯文本无需二进制文件头校验 |
 
-### 2.3 安全加固
+### 2.3 安全性
 
-| ID | 风险 | 修复 | 状态 |
-|----|------|------|------|
-| R1 | 文件类型伪装 | Magic Bytes 校验 (PDF/DOCX/XLSX/PPTX/PNG/JPG) | ✅ |
-| R2 | PDF Zip Bomb | MAX_PAGE_PIXELS=100M 像素上限 | ✅ |
-| R3 | 分块膨胀攻击 | MAX_CHUNKS_PER_DOC=500 | ✅ |
-| R4 | 用户存储配额 | KB 200文档 / 用户 1000文档 / 500MB | ✅ |
-| R5 | API 费用放大 | max-images-per-doc=50 + 四重过滤 | ✅ |
-| R6 | 异步任务积压 | 有界线程池 (core=2, max=4, queue=20) | ✅ |
-| R7 | OCR 缓存投毒 | 读写大小校验 1MB | ✅ |
-| R8 | XSS/注入 | ChunkingService prompt injection 过滤 | ✅ |
-| R9 | 重索引频率 | RateLimitRule 10次/天 | ✅ |
-| — | 文件大小上限 | 5MB → 20MB 统一 | ✅ |
+| ID | 措施 | 状态 |
+|----|------|------|
+| R1 | 文件类型限制（仅 TXT/MD，后端 `getFileType()` 兜底） | ✅ |
+| R2 | 分块膨胀攻击 — MAX_CHUNKS_PER_DOC=500 | ✅ |
+| R3 | 用户存储配额 — KB 200文档 / 用户 1000文档 / 500MB | ✅ |
+| R4 | 异步任务积压 — 有界线程池 (core=2, max=4, queue=20) | ✅ |
+| R5 | XSS/注入 — ChunkingService prompt injection 过滤 | ✅ |
+| R6 | 重索引频率 — RateLimitRule 10次/天 | ✅ |
+| R7 | 文件大小上限 — 20MB | ✅ |
+| R8 | 异常信息脱敏 — Controller 仅 catch IOException，其余走 GlobalExceptionHandler | ✅ |
+| R9 | 错误消息不泄漏 — DB 存储固定消息，详细信息仅记录日志 | ✅ |
 
 ### 2.4 关键文件
 
-| 文件 | 行数 | 说明 |
-|------|------|------|
-| `KbRetrievalService.java` | — | 混合检索编排 |
-| `KbBm25IndexService.java` | — | KB 专用 Lucene BM25 索引 |
-| `HybridRetrievalService.java` | — | RRF 融合 + Rerank 精排 |
-| `QueryRewriterService.java` | — | LLM 查询重写 |
-| `ChunkingService.java` | ~90 | 递归字符分割 + injection 过滤 |
-| `PdfParser.java` | ~580 | PDF 解析 + 图片提取 + 视觉识别 + OCR |
-| `ImageService.java` | ~245 | S3 上传 + Base64 视觉 API |
-| `PdfImageCacheService.java` | ~85 | 图片识别结果缓存 |
-| `PdfImageProperties.java` | ~20 | 6 项可配置参数 |
+| 文件 | 说明 |
+|------|------|
+| `KbRetrievalService.java` | 混合检索编排 |
+| `KbBm25IndexService.java` | KB 专用 Lucene BM25 索引 |
+| `ChunkingService.java` | 递归字符分割 + injection 过滤 |
+| `TxtParser.java` | 纯文本解析（txt/md/csv） |
+| `KnowledgeBaseService.java` | 知识库核心服务 |
+| `KnowledgeBaseController.java` | REST API |
+
+### 2.5 已删除文件
+
+| 文件 | 原因 |
+|------|------|
+| `PdfParser.java` | PDF 解析器，已废弃 |
+| `DocxParser.java` | DOCX 解析器，已废弃 |
+| `ImageParser.java` | 图片解析器，已废弃 |
+| `HtmlParser.java` | HTML 解析器，已废弃 |
+| `ExcelParser.java` | Excel 解析器，已废弃 |
+| `PptxParser.java` | PPT 解析器，已废弃 |
+| `ContentFusion.java` | 多路内容融合器，已废弃 |
+| `OcrConfig.java` | Tesseract OCR 配置，已废弃 |
+| `OcrProperties.java` | OCR 配置属性，已废弃 |
+| `PdfImageProperties.java` | PDF 图片配置属性，已废弃 |
+| `OcrFailedException.java` | OCR 异常类，已废弃 |
+| `ImagePreprocessor.java` | OCR 图像预处理，已废弃 |
+| `OcrPostProcessor.java` | OCR 后处理，已废弃 |
+| `OcrCacheService.java` | OCR 缓存服务，已废弃 |
+| `PdfImageCacheService.java` | 图片视觉识别缓存，已废弃 |
 
 ---
 
@@ -115,47 +128,43 @@ Plans5.0 聚焦两大系统：**RAG 知识库** 与 **长期记忆系统**，包
 
 ### 3.3 关键文件
 
-| 文件 | 行数 | 说明 |
-|------|------|------|
-| `MemoryService.java` | ~460 | 记忆核心逻辑 + sanitize |
-| `MemoryController.java` | ~137 | REST API + 校验 + 实体合并接口 |
-| `GraphMemoryService.java` | ~375 | 知识图谱 + 实体消歧 + 合并 |
-| `HybridRetrievalService.java` | — | 三路召回 + RRF + Rerank |
-| `Bm25IndexService.java` | ~155 | Lucene BM25 + 查询长度限制 |
-| `MessageContextBuilder.java` | ~250 | LLM 上下文构建 + 记忆注入过滤 |
-| `RateLimitInterceptor.java` | ~310 | 17 条限频规则 (含 3 条记忆) |
+| 文件 | 说明 |
+|------|------|
+| `MemoryService.java` | 记忆核心逻辑 + sanitize |
+| `MemoryController.java` | REST API + 校验 + 实体合并接口 |
+| `GraphMemoryService.java` | 知识图谱 + 实体消歧 + 合并 |
+| `HybridRetrievalService.java` | 三路召回 + RRF + Rerank |
+| `Bm25IndexService.java` | Lucene BM25 + 查询长度限制 |
+| `MessageContextBuilder.java` | LLM 上下文构建 + 记忆注入过滤 |
+| `RateLimitInterceptor.java` | 17 条限频规则 (含 3 条记忆) |
 
 ---
 
 ## 四、安全体系总览
 
-本阶段共发现并修复 **23 项安全风险**：
+本阶段共发现并修复 **21 项安全风险**：
 
-| 系统 | 高危 | 中危 | 低危 | 已修复 |
-|------|------|------|------|--------|
-| 知识库 | 5 | 1 | 4 | **10** |
-| 记忆系统 | 3 | 5 | 3 | **11** |
+| 系统 | 已修复 |
+|------|--------|
+| 知识库 | **9** |
+| 记忆系统 | **12** |
 
 安全文档：
-- [rag-kb-security-assessment.md](plans5.0/rag-kb-security-assessment.md) — 知识库 10 项风险全量分析
-- [memory-security-plan.md](plans5.0/memory-security-plan.md) — 记忆系统 13 项风险修复计划
+- [rag-kb-security-assessment.md](Plans.5.0/rag-kb-security-assessment.md) — 知识库安全评估
+- [memory-security-plan.md](Plans.5.0/memory-security-plan.md) — 记忆系统安全加固计划
 
 ---
 
 ## 五、测试结果
 
 ```
-Tests: 50 total
-AichatApplicationTests:             1 passed
-ImagePreprocessorTest:              6 passed
-OcrCacheServiceTest:                5 passed
-OcrPostProcessorTest:               9 passed
-PdfParserTextValidTest:             7 passed
 ToolCallAccumulatorTest:            8 passed
 ToolDefinitionTest:                 3 passed
 ToolRegistryTest:                  11 passed
-Result: BUILD SUCCESS — 0 failures, 0 errors
+Result: BUILD SUCCESS
 ```
+
+> 已移除 OCR 相关测试（ImagePreprocessorTest、OcrCacheServiceTest、OcrPostProcessorTest、PdfParserTextValidTest）。
 
 ---
 
@@ -163,17 +172,13 @@ Result: BUILD SUCCESS — 0 failures, 0 errors
 
 | 文档 | 内容 |
 |------|------|
-| [rag-knowledge-base-analysis.md](plans5.0/rag-knowledge-base-analysis.md) | 知识库差距分析 |
-| [rag-knowledge-base-analysis-v2.md](plans5.0/rag-knowledge-base-analysis-v2.md) | 知识库 v2 评估 |
-| [rag-knowledge-base-improvement-plan.md](plans5.0/rag-knowledge-base-improvement-plan.md) | P0-P3 改进方案 |
-| [rag-knowledge-base-re-evaluation.md](plans5.0/rag-knowledge-base-re-evaluation.md) | 改进后重新评估 |
-| [rag-ocr-optimization-plan.md](plans5.0/rag-ocr-optimization-plan.md) | OCR 18→12 项优化方案 |
-| [rag-pdf-image-recognition-plan.md](plans5.0/rag-pdf-image-recognition-plan.md) | PDF 图片视觉识别计划 |
-| [rag-kb-security-assessment.md](plans5.0/rag-kb-security-assessment.md) | 知识库安全评估 (10 项风险) |
-| [memory-system-analysis.md](plans5.0/memory-system-analysis.md) | 记忆系统完整架构 |
-| [memory-system-hybrid-retrieval-rerank.md](plans5.0/memory-system-hybrid-retrieval-rerank.md) | 混合检索+Rerank 方案 |
-| [memory-system-knowledge-graph-temporal.md](plans5.0/memory-system-knowledge-graph-temporal.md) | 知识图谱+时态管理 |
-| [memory-system-prompt-scoped-isolation.md](plans5.0/memory-system-prompt-scoped-isolation.md) | Prompt 级隔离方案 |
-| [memory-system-framework-comparison.md](plans5.0/memory-system-framework-comparison.md) | 记忆框架对比 |
-| [memory-security-plan.md](plans5.0/memory-security-plan.md) | 记忆系统安全加固计划 |
-| [knowledge-graph-optimization.md](plans5.0/knowledge-graph-optimization.md) | 知识图谱六项优化 |
+| [memory-kb-comprehensive-analysis.md](Plans.5.0/memory-kb-comprehensive-analysis.md) | 记忆+知识库综合分析 |
+| [rag-kb-security-assessment.md](Plans.5.0/rag-kb-security-assessment.md) | 知识库安全评估 |
+| [memory-system-analysis.md](Plans.5.0/memory-system-analysis.md) | 记忆系统完整架构 |
+| [memory-system-hybrid-retrieval-rerank.md](Plans.5.0/memory-system-hybrid-retrieval-rerank.md) | 混合检索+Rerank 方案 |
+| [memory-system-knowledge-graph-temporal.md](Plans.5.0/memory-system-knowledge-graph-temporal.md) | 知识图谱+时态管理 |
+| [memory-system-prompt-scoped-isolation.md](Plans.5.0/memory-system-prompt-scoped-isolation.md) | Prompt 级隔离方案 |
+| [memory-system-framework-comparison.md](Plans.5.0/memory-system-framework-comparison.md) | 记忆框架对比 |
+| [memory-security-plan.md](Plans.5.0/memory-security-plan.md) | 记忆系统安全加固计划 |
+| [knowledge-graph-optimization.md](Plans.5.0/knowledge-graph-optimization.md) | 知识图谱六项优化 |
+| [phase-summary.md](Plans.5.0/phase-summary.md) | 本文件 |

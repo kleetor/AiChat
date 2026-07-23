@@ -55,16 +55,6 @@ public class KnowledgeBaseService {
             new LinkedBlockingQueue<>(20),
             new ThreadPoolExecutor.CallerRunsPolicy());
 
-    /** 文件头 Magic Bytes 校验：扩展名 → 预期文件头（仅保留前端开放的 4 种格式） */
-    private static final Map<String, byte[]> MAGIC_BYTES = Map.of(
-            "pdf", new byte[]{0x25, 0x50, 0x44, 0x46},               // %PDF
-            "docx", new byte[]{0x50, 0x4B, 0x03, 0x04}               // PK..
-            // 以下格式暂不开放（前端仅 TXT/MD/PDF/DOCX）：
-            // "xlsx", new byte[]{0x50, 0x4B, 0x03, 0x04},           // PK..
-            // "pptx", new byte[]{0x50, 0x4B, 0x03, 0x04},           // PK..
-            // "png", new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47},     // .PNG
-            // "jpg", new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF} // ..Ø.
-    );
 
     public KnowledgeBaseService(KnowledgeBaseRepository kbRepo,
                                  KbDocumentRepository docRepo,
@@ -189,9 +179,6 @@ public class KnowledgeBaseService {
         if (file.getSize() > MAX_FILE_SIZE) {
             throw BusinessException.badRequest("文件大小不能超过 20MB");
         }
-        // Magic Bytes 校验：防止文件类型伪装
-        validateFileType(file, fileType);
-
         // 配额检查
         checkQuotas(kbId, userId, file.getSize());
 
@@ -352,7 +339,7 @@ public class KnowledgeBaseService {
             } catch (Exception e) {
                 log.error("文档处理失败: docId={}", docId, e);
                 doc.setStatus("ERROR");
-                doc.setErrorMsg(e.getMessage());
+                doc.setErrorMsg("文档处理失败，请重新上传");
                 doc.setChunkCount(0);
                 docRepo.save(doc);
             }
@@ -395,39 +382,9 @@ public class KnowledgeBaseService {
 
     private String getFileType(String fileName) {
         String lower = fileName.toLowerCase();
-        // 前端仅开放 TXT / MD / PDF / DOCX 四种格式
-        if (lower.endsWith(".pdf")) return "pdf";
-        if (lower.endsWith(".docx")) return "docx";
         if (lower.endsWith(".txt") || lower.endsWith(".csv")) return "txt"; // CSV 按文本处理
         if (lower.endsWith(".md")) return "md";
-        // 以下格式暂不开放，前端已限制 accept=".txt,.md,.pdf,.docx"：
-        // if (lower.endsWith(".xlsx")) return "xlsx";
-        // if (lower.endsWith(".pptx")) return "pptx";
-        // if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
-        // if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "jpg";
-        // if (lower.endsWith(".png")) return "png";
-        // if (lower.endsWith(".tiff") || lower.endsWith(".tif")) return "tiff";
-        // if (lower.endsWith(".bmp")) return "bmp";
         return "txt";
-    }
-
-    /** 验证文件头 Magic Bytes 是否与扩展名匹配 */
-    private void validateFileType(MultipartFile file, String fileType) throws IOException {
-        byte[] expected = MAGIC_BYTES.get(fileType);
-        if (expected == null) return;
-
-        byte[] header = new byte[expected.length];
-        int read = file.getInputStream().read(header);
-        if (read < expected.length) {
-            throw BusinessException.badRequest("文件内容过短，无法验证类型");
-        }
-        for (int i = 0; i < expected.length; i++) {
-            if (header[i] != expected[i]) {
-                throw BusinessException.badRequest(
-                        "文件类型不匹配：扩展名为 ." + fileType + " 但文件头不符合");
-            }
-        }
-        log.debug("Magic Bytes 校验通过: fileType={}", fileType);
     }
 
     /** 检查用户和知识库的存储配额 */

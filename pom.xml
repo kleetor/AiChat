@@ -148,26 +148,6 @@
             <version>2.28.0</version>
         </dependency>
 
-        <!-- PDF 解析 -->
-        <dependency>
-            <groupId>org.apache.pdfbox</groupId>
-            <artifactId>pdfbox</artifactId>
-            <version>3.0.3</version>
-        </dependency>
-
-        <!-- PDF 表格提取 -->
-        <dependency>
-            <groupId>technology.tabula</groupId>
-            <artifactId>tabula</artifactId>
-            <version>1.0.5</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.slf4j</groupId>
-                    <artifactId>slf4j-simple</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
         <!-- Office 文档解析 (Word/Excel/PPT) -->
         <dependency>
             <groupId>org.apache.poi</groupId>
@@ -180,13 +160,6 @@
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>
             <version>1.18.1</version>
-        </dependency>
-
-        <!-- OCR 识别（Tesseract） -->
-        <dependency>
-            <groupId>net.sourceforge.tess4j</groupId>
-            <artifactId>tess4j</artifactId>
-            <version>5.12.0</version>
         </dependency>
 
         <!-- Spring AI 2.0 -->

@@ -175,9 +175,9 @@ export default function KBModal({ open, onClose }: KBModalProps) {
             </div>
             <div className="p-4 border-t border-border shrink-0">
               <label className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-border text-xs text-muted-foreground cursor-pointer hover:border-primary/50 hover:text-primary transition-colors">
-                <Upload size={14} />上传文档 (TXT / MD / PDF / DOCX)
+                <Upload size={14} />上传文档 (TXT / MD)
                 <input type="file"
-                  accept=".txt,.md,.pdf,.docx"
+                  accept=".txt,.md"
                   className="hidden" onChange={handleFileSelect} />
               </label>
             </div>
