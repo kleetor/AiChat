@@ -1,0 +1,172 @@
+================================================================================
+PromptHUB 实施计划 v3.4 — 精简版（19 项）
+================================================================================
+修订日期：2026-07-02
+审查结论：Level 1（CORS/JWT/计费）已全部实现，移除；补充 follows 表定义；
+          FULLTEXT 加 ngram 中文分词；补注评分并发/编辑器依赖。
+
+================================================================================
+Level 1：数据库 DDL（原 Lv2）
+================================================================================
+
+  1.1 扩展 prompts_hub 表（10 个新列）
+      description VARCHAR(500), category VARCHAR(50),
+      tags JSON, model_support VARCHAR(200),
+      status VARCHAR(20) DEFAULT 'published', version VARCHAR(20) DEFAULT 'v1.0',
+      original_prompt_id BIGINT NULL, view_count INT DEFAULT 0,
+      save_count INT DEFAULT 0, avg_rating DECIMAL(3,2) DEFAULT 0,
+      updated_at DATETIME
+
+  1.2 新建 4 张表
+      ┌─────────────────┬──────────────────────────────────────┐
+      │ system_rules     │ id, name, content(TEXT), is_active,  │
+      │                  │ sort_order INT, updated_at           │
+      │ favorites        │ id, user_id(FK→users),               │
+      │                  │ prompt_id(FK→prompts_hub),           │
+      │                  │ created_at                           │
+      │                  │ UNIQUE(user_id, prompt_id)            │
+      │ usage_history    │ id, user_id, prompt_id,             │
+      │                  │ action VARCHAR(20), created_at       │
+      │ follows          │ id, follower_id(FK→users),           │
+      │                  │ followed_id(FK→users), created_at    │
+      │                  │ UNIQUE(follower_id, followed_id)     │
+      └─────────────────┴──────────────────────────────────────┘
+
+  1.3 关键词搜索索引（中文支持）
+      SET GLOBAL ngram_token_size=1;  -- MySQL 需重启，或手动执行后注释
+      ALTER TABLE prompts_hub ADD FULLTEXT INDEX ft_search
+      (name, description, content) WITH PARSER ngram;
+
+  ※ 以上均通过 Flyway V2 迁移脚本执行
+
+================================================================================
+Level 2：JPA 实体 + Repository（原 Lv3）
+================================================================================
+
+  2.1 4 个新实体：SystemRule, Favorite, UsageHistory, Follow
+
+  2.2 4 个新 Repository（JpaRepository）
+
+  2.3 扩展 PromptsHub 实体（+10 字段）
+      tags 字段映射为 String（存储 JSON 字符串，应用层反序列化），避免引入 Hibernate 6
+      JSON 类型特有依赖。Prompt 实体无需扩展。
+
+================================================================================
+Level 3：社区浏览与简单交互（原 Lv4）
+================================================================================
+
+  3.1 浏览发现 API
+      ├── GET /api/v1/prompts-hub?category=&sort=&page=
+      ├── GET /api/v1/prompts-hub/categories
+      └── PromptsHubService 增加分页筛选（JPA Specification，防 SQL 注入）
+
+  3.2 关键词搜索
+      ├── GET /api/v1/prompts-hub/search?q=&category=
+      ├── MySQL FULLTEXT + ngram 搜索 name / description / content
+      └── 注意：对用户输入转义 FULLTEXT 特殊字符 (+ - * " 等)
+
+  3.3 社区首页
+      ├── GET /api/v1/prompts-hub/featured（featured=true 精选 + 最新排序）
+      └── 前端 PromptHUB 首页：推荐区 + 列表 + 无限滚动（在 React 或改造 workshop.js 中实现）
+
+  3.4 保存
+      ├── POST /api/v1/prompts-hub/{id}/save
+      ├── POST /api/v1/prompts-hub/{id}/unsave
+      └── favorites 表 UNIQUE 约束天然去重
+
+  3.5 关注
+      ├── POST   /api/v1/follows/{userId}
+      ├── DELETE /api/v1/follows/{userId}
+      ├── GET    /api/v1/follows/following
+      ├── GET    /api/v1/follows/followers
+      └── 前端 FollowButton（关注/已关注双态）
+
+  3.6 使用历史
+      ├── GET /api/v1/usage-history（分页）
+      └── 自动记录：保存/复制操作时写入
+
+================================================================================
+Level 4：提示词详情与编辑器（原 Lv5）
+================================================================================
+
+  4.1 详情页 PromptDetailPage
+      ├── 名称、作者、分类
+      ├── 完整内容展示 + "一键复制" + "一键保存到本地提示词"
+      ├── 统计：保存量 / 点赞数 / 评分 / 评论数 / 浏览量
+      └── 评分评论区（星级评分 + 嵌套回复）
+
+  4.2 星级评分
+      ├── POST /api/v1/prompts-hub/{id}/rate {rating: 1-5}
+      ├── 前端 RatingStar 组件（半星悬浮预览）
+      └── avg_rating 异步重算：写入评分 → @Async 事件触发重算（避免写锁阻塞）
+
+  4.3 评论嵌套回复
+      ├── POST /api/v1/prompts-hub/{id}/comments {content, parentId?}
+      └── 最大嵌套深度 2 层
+
+  4.4 提示词编辑器 PromptEditor
+      ├── 左侧 Markdown 编辑 + 右侧实时预览（引入 @uiw/react-md-editor）
+      ├── 分类选择器（下拉选择分类）
+      ├── 自动草稿保存（localStorage + 每 30s 后端保存，status=draft）
+      └── 发布按钮 → status 改为 pending_review，进入 Admin 审核队列
+
+================================================================================
+Level 5：个人中心与审核（原 Lv6）
+================================================================================
+
+  5.1 我的创作页
+      ├── GET /api/v1/users/me/prompts?status=draft|pending|published|removed
+      └── 操作：编辑 / 下架（status=removed）/ 重新上架
+
+  5.2 使用历史页
+      ├── GET /api/v1/usage-history?page=
+      └── DELETE /api/v1/usage-history（清空）
+
+  5.3 Admin 审核台
+      ├── GET  /api/admin/prompts-hub/audit?status=pending_review
+      ├── POST /api/admin/prompts-hub/{id}/approve
+      ├── POST /api/admin/prompts-hub/{id}/reject {reason}
+      ├── 操作需 @Transactional，审核结果通过现有 Notification 系统通知作者
+      └── 前端 AdminAuditPage
+
+================================================================================
+Level 6：两层提示词注入（原 Lv7）
+================================================================================
+
+  注入顺序（不可变）：系统规则 → 自定义提示词 → 记忆 → 摘要 → 知识库 → 历史 → 当前消息
+
+  6.1 后端改造（仅 MessageContextBuilder.java）
+      ├── Admin 管理 SystemRule（GET/POST/PUT/DELETE + toggle 启用/禁用）
+      └── buildMessagesArray() 现有 prompt 注入之前，新增查询 is_active=true 的
+          SystemRule 并按 sort_order 拼接为 system 消息。
+          ← 约 10 行新增代码，不改变现有注入逻辑
+
+  6.2 前端无需改造
+      ├── ChatRequest.promptId 保持不变
+      ├── PromptModal / PromptIndicator / Header 全部保持现状
+      └── 现有逻辑可直接复用
+
+================================================================================
+实施注意事项
+================================================================================
+
+  • FULLTEXT 中文分词：MySQL 8.0 需 ngram_token_size=1，建议 DBA 手动设置后建索引
+  • 搜索输入转义：FULLTEXT 布尔模式特殊字符 (+ - < > ( ) ~ * " @) 需过滤
+  • avg_rating 重算：用 @TransactionalEventListener + @Async 异步更新，避免与评分写
+    操作产生死锁
+  • follows 权限：关注/取关仅限已登录用户，关注列表需过滤被禁用用户
+  • 双前端策略：Lv3-Lv5 的社区页面建议改造现有 workshop.html / workshop.js
+    （低风险、快速交付），而非在 React 重建；Lv6 为纯后端改造不受影响
+
+================================================================================
+难度总览
+================================================================================
+
+ Lv1 ██░░░░  DDL 脚本（4 项）                           SQL 为主，Flyway V2 迁移
+ Lv2 ██░░░░  实体 + Repository（8 文件）                 模板代码
+ Lv3 █████░  社区浏览 + 简单交互（6 模块）               标准 CRUD + 3 页面组件
+ Lv4 █████░  详情页 + 编辑器（4 项）                     4 个核心前端页面
+ Lv5 ████░░  个人中心 + 审核（3 项）                     中等复杂度
+ Lv6 ████░░  两层注入改造（1 项）                        仅后端 ~10 行代码
+
+ 总计：19 项，相较 v3.0 减少 23 项（55%）

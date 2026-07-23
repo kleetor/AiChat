@@ -44,9 +44,11 @@ uploads/**
 ### ChromaDB ###
 chroma_data/
 
+### BM25 Index ###
+data/
+
 ### Temp files ###
 query
 
-### Plans & SQL ###
-Plans*/
+### SQL ###
 SQL/
