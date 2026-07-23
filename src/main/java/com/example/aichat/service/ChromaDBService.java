@@ -114,7 +114,13 @@ public class ChromaDBService extends BaseChromaDBService<Long> {
 
     // ---------- 内部类型 ----------
 
-    public record ChunkData(Long documentId, int chunkIndex, String fileName, String content) {}
+    public record ChunkData(Long documentId, int chunkIndex, String fileName, String content) {
+        /** 构建时默认 ocrSource=false，可由调用方在构造后设置 */
+        public ChunkData withOcrSource(boolean ocrSource) {
+            return new ChunkData(documentId, chunkIndex,
+                    ocrSource ? "(扫描件OCR) " + fileName : fileName, content);
+        }
+    }
 
     public record QueryResultItem(String id, String document, double distance,
                                    Map<String, Object> metadata) {}

@@ -12,4 +12,8 @@ public class KnowledgeBaseRequest {
 
     private String description;
     private String visibility;
+    @Size(max = 2000, message = "Prompt 模板不能超过 2000 个字符")
+    private String promptTemplate;
+    private Integer chunkSize;
+    private Integer chunkOverlap;
 }

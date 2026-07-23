@@ -19,26 +19,42 @@ public class ChunkingService {
     private int getChunkSize() { return ragProperties.getChunk().getSize(); }
     private int getOverlap() { return ragProperties.getChunk().getOverlap(); }
 
+    /** 使用系统默认参数分块 */
+    public List<String> split(String text) {
+        return split(text, null, null);
+    }
+
+    /**
+     * 使用指定参数分块。
+     * @param chunkSize 分块大小，null/<=0 使用系统默认
+     * @param overlap   重叠字符数，null/<0 使用系统默认
+     */
+    public List<String> split(String text, Integer chunkSize, Integer overlap) {
+        int cs = (chunkSize != null && chunkSize > 0) ? chunkSize : getChunkSize();
+        int ol = (overlap != null && overlap >= 0) ? overlap : getOverlap();
+        return doSplit(text, cs, ol);
+    }
+
     /**
      * 递归字符分割：\n\n → \n → 。 → ； → ，
      * 最后按 chunk_size 硬切，带 overlap
      */
-    public List<String> split(String text) {
+    private List<String> doSplit(String text, int chunkSize, int overlap) {
         if (text == null || text.isBlank()) return List.of();
         String[] separators = {"\n\n", "\n", "。", "；", "，"};
         List<String> segments = new ArrayList<>();
         segments.add(text);
 
         for (String sep : separators) {
-            segments = splitBySeparator(segments, sep);
+            segments = splitBySeparator(segments, sep, chunkSize);
         }
-        return enforceMaxSize(segments, getChunkSize(), getOverlap());
+        return enforceMaxSize(segments, chunkSize, overlap);
     }
 
-    private List<String> splitBySeparator(List<String> segments, String sep) {
+    private List<String> splitBySeparator(List<String> segments, String sep, int chunkSize) {
         List<String> result = new ArrayList<>();
         for (String seg : segments) {
-            if (seg.length() <= getChunkSize()) {
+            if (seg.length() <= chunkSize) {
                 result.add(seg);
             } else {
                 for (String part : seg.split(Pattern.quote(sep))) {

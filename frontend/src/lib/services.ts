@@ -55,6 +55,9 @@ export interface KnowledgeBase {
   id: number;
   name: string;
   description: string;
+  promptTemplate?: string | null;
+  chunkSize?: number | null;
+  chunkOverlap?: number | null;
   docCount?: number;
   chunkCount?: number;
 }
@@ -212,12 +215,14 @@ export function getKBList(): Promise<KnowledgeBase[]> {
   return apiGet("/api/kb/list");
 }
 
-export function createKB(name: string, description: string): Promise<KnowledgeBase> {
-  return apiPost("/api/kb/create", { name, description });
+export function createKB(name: string, description: string, promptTemplate?: string,
+    chunkSize?: number | null, chunkOverlap?: number | null): Promise<KnowledgeBase> {
+  return apiPost("/api/kb/create", { name, description, promptTemplate, chunkSize, chunkOverlap });
 }
 
-export function updateKB(id: number, name: string, description: string): Promise<KnowledgeBase> {
-  return apiPut(`/api/kb/${id}`, { name, description });
+export function updateKB(id: number, name: string, description: string, promptTemplate?: string,
+    chunkSize?: number | null, chunkOverlap?: number | null): Promise<KnowledgeBase> {
+  return apiPut(`/api/kb/${id}`, { name, description, promptTemplate, chunkSize, chunkOverlap });
 }
 
 export function deleteKB(id: number): Promise<void> {
@@ -240,9 +245,10 @@ export function getKBDocuments(kbId: number): Promise<KbDocument[]> {
   return apiGet(`/api/kb/${kbId}/docs`);
 }
 
-export function uploadKBDocument(kbId: number, file: File): Promise<KbDocument> {
+export function uploadKBDocument(kbId: number, file: File, forceOcr?: boolean): Promise<KbDocument> {
   const fd = new FormData();
   fd.append("file", file);
+  if (forceOcr) fd.append("forceOcr", "true");
   return apiPostForm(`/api/kb/${kbId}/docs/upload`, fd);
 }
 

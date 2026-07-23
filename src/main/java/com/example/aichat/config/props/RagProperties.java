@@ -20,5 +20,9 @@ public class RagProperties {
     @Data
     public static class Retrieve {
         private int topK = 5;
+        /** 粗排候选数（向量和BM25各召回此数量，经RRF融合后送入Rerank精排） */
+        private int candidateSize = 20;
+        /** 是否启用查询重写 */
+        private boolean queryRewriteEnabled = true;
     }
 }

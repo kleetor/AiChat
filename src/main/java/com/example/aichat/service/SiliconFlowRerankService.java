@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
+import java.util.stream.IntStream;
 
 /**
  * SiliconFlow Rerank API 封装 — Cross-Encoder 精排。
@@ -80,5 +81,50 @@ public class SiliconFlowRerankService {
         }
     }
 
+    /**
+     * 通用文本精排：对候选文档列表做 Cross-Encoder 打分，返回 (index, score)。
+     * 供知识库等非 MemoryItem 场景使用。
+     */
+    public List<RerankTextResult> rerankTexts(String query, List<String> documents, int topN) {
+        if (documents.isEmpty()) return List.of();
+
+        try {
+            Map<String, Object> body = Map.of(
+                    "model", props.getModel(),
+                    "query", query,
+                    "documents", documents,
+                    "top_n", Math.min(topN, documents.size())
+            );
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(props.getApiKey());
+
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+            ResponseEntity<Map> resp = restTemplate.postForEntity(
+                    props.getApiUrl(), request, Map.class);
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> results = (List<Map<String, Object>>) resp.getBody().get("results");
+            if (results == null || results.isEmpty()) return List.of();
+
+            return results.stream()
+                    .map(r -> {
+                        int idx = ((Number) r.get("index")).intValue();
+                        double score = ((Number) r.get("relevance_score")).doubleValue();
+                        return new RerankTextResult(idx, score);
+                    })
+                    .sorted(Comparator.comparingDouble(RerankTextResult::score).reversed())
+                    .toList();
+
+        } catch (Exception e) {
+            log.warn("Rerank API 调用失败，降级为原始排序: {}", e.getMessage());
+            return IntStream.range(0, Math.min(topN, documents.size()))
+                    .mapToObj(i -> new RerankTextResult(i, 1.0))
+                    .toList();
+        }
+    }
+
     public record ScoredItem(Long itemId, double score) {}
+    public record RerankTextResult(int index, double score) {}
 }

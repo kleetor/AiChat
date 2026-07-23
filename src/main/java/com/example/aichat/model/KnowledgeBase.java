@@ -41,6 +41,15 @@ public class KnowledgeBase {
     @Builder.Default
     private Long totalSize = 0L;
 
+    @Column(name = "prompt_template", length = 2000)
+    private String promptTemplate;
+
+    @Column(name = "chunk_size")
+    private Integer chunkSize;
+
+    @Column(name = "chunk_overlap")
+    private Integer chunkOverlap;
+
     @Column(name = "created_at", nullable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

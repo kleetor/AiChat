@@ -20,12 +20,18 @@ export default function KBModal({ open, onClose }: KBModalProps) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
+  const [editPrompt, setEditPrompt] = useState("");
+  const [editChunkSize, setEditChunkSize] = useState("");
+  const [editChunkOverlap, setEditChunkOverlap] = useState("");
   const [editErr, setEditErr] = useState("");
 
   // Docs view
   const [currentKb, setCurrentKb] = useState<KnowledgeBase | null>(null);
   const [docs, setDocs] = useState<KbDocument[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 上传级 OCR 选项
+  const [forceOcr, setForceOcr] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (open) loadKBs();
@@ -40,14 +46,17 @@ export default function KBModal({ open, onClose }: KBModalProps) {
   };
 
   // ---- KB CRUD ----
-  const openCreate = () => { setEditingId(null); setEditName(""); setEditDesc(""); setEditErr(""); setEditOpen(true); };
-  const openEdit = (kb: KnowledgeBase) => { setEditingId(kb.id); setEditName(kb.name); setEditDesc(kb.description || ""); setEditErr(""); setEditOpen(true); };
+  const openCreate = () => { setEditingId(null); setEditName(""); setEditDesc(""); setEditPrompt(""); setEditChunkSize(""); setEditChunkOverlap(""); setEditErr(""); setEditOpen(true); };
+  const openEdit = (kb: KnowledgeBase) => { setEditingId(kb.id); setEditName(kb.name); setEditDesc(kb.description || ""); setEditPrompt(kb.promptTemplate || ""); setEditChunkSize(kb.chunkSize?.toString() || ""); setEditChunkOverlap(kb.chunkOverlap?.toString() || ""); setEditErr(""); setEditOpen(true); };
 
   const saveKB = async () => {
     if (!editName.trim()) { setEditErr("请输入名称"); return; }
     try {
-      if (editingId) await updateKB(editingId, editName.trim(), editDesc.trim());
-      else await createKB(editName.trim(), editDesc.trim());
+      const pt = editPrompt.trim() || undefined;
+      const cs = editChunkSize.trim() ? Number(editChunkSize.trim()) : null;
+      const co = editChunkOverlap.trim() ? Number(editChunkOverlap.trim()) : null;
+      if (editingId) await updateKB(editingId, editName.trim(), editDesc.trim(), pt, cs, co);
+      else await createKB(editName.trim(), editDesc.trim(), pt, cs, co);
       setEditOpen(false);
       loadKBs();
     } catch { setEditErr("保存失败"); }
@@ -78,12 +87,26 @@ export default function KBModal({ open, onClose }: KBModalProps) {
 
   const goBack = () => { setCurrentKb(null); setDocs([]); if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !currentKb) return;
-    try { await uploadKBDocument(currentKb.id, file); loadDocs(currentKb.id); } catch { /* ignore */ }
+    // 仅 PDF 显示强制 OCR 确认栏
+    if (file.name.toLowerCase().endsWith(".pdf")) {
+      setPendingFile(file);
+    } else {
+      doUpload(file, false);
+    }
     e.target.value = "";
   };
+
+  const doUpload = async (file: File, force: boolean) => {
+    if (!currentKb) return;
+    try { await uploadKBDocument(currentKb.id, file, force); loadDocs(currentKb.id); } catch { /* ignore */ }
+    setPendingFile(null);
+    setForceOcr(false);
+  };
+
+  const cancelUpload = () => { setPendingFile(null); setForceOcr(false); };
 
   const delDoc = async (id: number) => {
     if (!confirm("确定删除此文档？")) return;
@@ -167,24 +190,88 @@ export default function KBModal({ open, onClose }: KBModalProps) {
                 </div>
               ))}
             </div>
-            <div className="p-4 border-t border-border shrink-0">
-              <label className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-border text-xs text-muted-foreground cursor-pointer hover:border-primary/50 hover:text-primary transition-colors">
-                <Upload size={14} />上传文档 (TXT / MD / PDF)
-                <input type="file" accept=".txt,.md,.pdf" className="hidden" onChange={handleUpload} />
-              </label>
+            <div className="p-4 border-t border-border shrink-0 space-y-2">
+              {/* 强制 OCR 确认栏 — 仅选择 PDF 时显示 */}
+              {pendingFile && (
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs">
+                  <span className="text-amber-800 truncate flex-1 mr-2">
+                    已选择 <strong>{pendingFile.name}</strong>
+                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <label className="flex items-center gap-1 cursor-pointer select-none">
+                      <input type="checkbox" checked={forceOcr} onChange={e => setForceOcr(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded accent-amber-600" />
+                      <span className="text-amber-700 whitespace-nowrap">强制 OCR（扫描件）</span>
+                    </label>
+                    <button onClick={() => doUpload(pendingFile, forceOcr)}
+                      className="px-3 py-1 rounded-md bg-amber-600 text-white text-xs font-medium hover:bg-amber-700 transition-colors">
+                      上传
+                    </button>
+                    <button onClick={cancelUpload}
+                      className="px-2 py-1 text-amber-600 hover:text-amber-800 transition-colors">
+                      取消
+                    </button>
+                  </div>
+                </div>
+              )}
+              {/* 上传按钮 — 无 pending 时显示 */}
+              {!pendingFile && (
+                <label className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-border text-xs text-muted-foreground cursor-pointer hover:border-primary/50 hover:text-primary transition-colors">
+                  <Upload size={14} />上传文档 (TXT / MD / PDF / DOCX / XLSX / PPTX / HTML / CSV / 图片)
+                  <input type="file"
+                    accept=".txt,.md,.pdf,.docx,.xlsx,.pptx,.html,.htm,.csv,.jpg,.jpeg,.png,.tiff,.tif,.bmp"
+                    className="hidden" onChange={handleFileSelect} />
+                </label>
+              )}
             </div>
           </>
         )}
 
-        {/* Edit KB Modal */}
+        {/* Edit KB Modal — 独立于 overflow-hidden 主容器，避免裁剪 */}
         {editOpen && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 rounded-2xl">
-            <div className="bg-background rounded-xl p-5 w-[320px] border shadow-xl">
-              <h3 className="text-sm font-medium mb-3">{editingId ? "编辑知识库" : "新建知识库"}</h3>
-              <input value={editName} onChange={e => setEditName(e.target.value)} placeholder="名称" className="w-full text-xs px-3 py-2 rounded-lg border bg-transparent outline-none mb-2" style={{ borderColor: "hsl(var(--border))" }} />
-              <input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="描述（可选）" className="w-full text-xs px-3 py-2 rounded-lg border bg-transparent outline-none mb-2" style={{ borderColor: "hsl(var(--border))" }} />
-              {editErr && <p className="text-[11px] text-destructive mb-2">{editErr}</p>}
-              <div className="flex gap-2">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20" onClick={() => setEditOpen(false)}>
+            <div className="bg-background rounded-xl p-5 w-[360px] border shadow-xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <h3 className="text-sm font-medium mb-3 shrink-0">{editingId ? "编辑知识库" : "新建知识库"}</h3>
+              <div className="flex-1 overflow-y-auto space-y-2 pr-0.5">
+                <input value={editName} onChange={e => setEditName(e.target.value)} placeholder="名称" className="w-full text-xs px-3 py-2 rounded-lg border bg-transparent outline-none" style={{ borderColor: "hsl(var(--border))" }} />
+                <input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="描述（可选）" className="w-full text-xs px-3 py-2 rounded-lg border bg-transparent outline-none" style={{ borderColor: "hsl(var(--border))" }} />
+                <textarea
+                  value={editPrompt}
+                  onChange={e => setEditPrompt(e.target.value)}
+                  placeholder="回答风格（可选，支持 {context} / {query} 占位符）"
+                  rows={4}
+                  className="w-full text-xs px-3 py-2 rounded-lg border bg-transparent outline-none resize-none"
+                  style={{ borderColor: "hsl(var(--border))" }}
+                />
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  占位符：<code className="bg-muted px-1 rounded">{`{context}`}</code> 检索到的文档内容，<code className="bg-muted px-1 rounded">{`{query}`}</code> 用户问题。<br />
+                  留空则使用默认模板。提示：客服回复请设置字数限制。
+                </p>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="text-[10px] text-muted-foreground block mb-1">分块大小（字符）</label>
+                    <input
+                      type="number" min="100" max="2000" step="50"
+                      value={editChunkSize} onChange={e => setEditChunkSize(e.target.value)}
+                      placeholder="默认 500"
+                      className="w-full text-xs px-3 py-2 rounded-lg border bg-transparent outline-none"
+                      style={{ borderColor: "hsl(var(--border))" }}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[10px] text-muted-foreground block mb-1">重叠字符数</label>
+                    <input
+                      type="number" min="0" max="500" step="10"
+                      value={editChunkOverlap} onChange={e => setEditChunkOverlap(e.target.value)}
+                      placeholder="默认 50"
+                      className="w-full text-xs px-3 py-2 rounded-lg border bg-transparent outline-none"
+                      style={{ borderColor: "hsl(var(--border))" }}
+                    />
+                  </div>
+                </div>
+                {editErr && <p className="text-[11px] text-destructive">{editErr}</p>}
+              </div>
+              <div className="flex gap-2 shrink-0 mt-3">
                 <button onClick={saveKB} className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium">保存</button>
                 <button onClick={() => setEditOpen(false)} className="flex-1 py-2 rounded-lg border text-xs text-muted-foreground" style={{ borderColor: "hsl(var(--border))" }}>取消</button>
               </div>

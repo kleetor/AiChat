@@ -1,12 +1,9 @@
 package com.example.aichat.service;
 
-import com.example.aichat.model.ChatMessage;
-import com.example.aichat.model.ConversationSummary;
-import com.example.aichat.model.MemoryItem;
-import com.example.aichat.model.Prompt;
-import com.example.aichat.model.SystemRule;
+import com.example.aichat.model.*;
 import com.example.aichat.repository.ChatMessageRepository;
 import com.example.aichat.repository.ConversationSummaryRepository;
+import com.example.aichat.repository.KnowledgeBaseRepository;
 import com.example.aichat.repository.SystemRuleRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -32,7 +29,8 @@ public class MessageContextBuilder {
     private final PromptService promptService;
     private final MemoryService memoryService;
     private final ConversationSummaryRepository summaryRepo;
-    private final ChromaDBService chromaDBService;
+    private final KbRetrievalService kbRetrievalService;
+    private final KnowledgeBaseRepository knowledgeBaseRepository;
     private final SystemRuleRepository systemRuleRepository;
     private final GraphMemoryService graphMemoryService;
     private final ObjectMapper objectMapper;
@@ -41,14 +39,16 @@ public class MessageContextBuilder {
                                   PromptService promptService,
                                   MemoryService memoryService,
                                   ConversationSummaryRepository summaryRepo,
-                                  ChromaDBService chromaDBService,
+                                  KbRetrievalService kbRetrievalService,
+                                  KnowledgeBaseRepository knowledgeBaseRepository,
                                   SystemRuleRepository systemRuleRepository,
                                   GraphMemoryService graphMemoryService) {
         this.chatMessageRepository = chatMessageRepository;
         this.promptService = promptService;
         this.memoryService = memoryService;
         this.summaryRepo = summaryRepo;
-        this.chromaDBService = chromaDBService;
+        this.kbRetrievalService = kbRetrievalService;
+        this.knowledgeBaseRepository = knowledgeBaseRepository;
         this.systemRuleRepository = systemRuleRepository;
         this.graphMemoryService = graphMemoryService;
         this.objectMapper = new ObjectMapper();
@@ -157,14 +157,14 @@ public class MessageContextBuilder {
             }
         }
 
-        // 4. 注入知识库检索
+        // 4. 注入知识库检索（混合检索：向量 + BM25 → RRF 融合 → Rerank 精排）
         if (knowledgeBaseId != null) {
             try {
-                ChromaDBService.QueryResult qr = chromaDBService.query(
-                        knowledgeBaseId, userMessage, 5);
+                ChromaDBService.QueryResult qr = kbRetrievalService.hybridSearch(
+                        knowledgeBaseId, userMessage);
                 if (qr != null && !qr.isEmpty()) {
-                    StringBuilder ctx = new StringBuilder(
-                            "以下是与用户问题相关的知识库内容，请基于这些内容回答：\n\n");
+                    // 构建检索上下文
+                    StringBuilder ctx = new StringBuilder();
                     for (var item : qr.items()) {
                         String fileName = item.metadata() != null
                                 ? String.valueOf(item.metadata().getOrDefault("file_name", "未知"))
@@ -172,14 +172,26 @@ public class MessageContextBuilder {
                         ctx.append("【来源: ").append(fileName).append("】\n")
                            .append(item.document()).append("\n\n");
                     }
-                    ctx.append("回答时请注明引用来源（文件名）。");
+                    // 读取知识库的 prompt 模板（支持 {context} / {query} 占位符）
+                    String promptContent;
+                    String template = knowledgeBaseRepository.findById(knowledgeBaseId)
+                            .map(KnowledgeBase::getPromptTemplate)
+                            .orElse(null);
+                    if (template != null && !template.isBlank()) {
+                        promptContent = template
+                                .replace("{context}", ctx.toString().trim())
+                                .replace("{query}", userMessage);
+                    } else {
+                        promptContent = "以下是与用户问题相关的知识库内容，请基于这些内容回答：\n\n"
+                                + ctx.toString().trim() + "\n回答时请注明引用来源（文件名）。";
+                    }
                     ObjectNode kbNode = messagesArray.addObject();
                     kbNode.put("role", "system");
-                    kbNode.put("content", ctx.toString());
-                    logger.info("知识库检索注入成功: kbId={}, results={}", knowledgeBaseId, qr.size());
+                    kbNode.put("content", promptContent);
+                    logger.info("知识库混合检索注入成功: kbId={}, results={}", knowledgeBaseId, qr.size());
                 }
             } catch (Exception e) {
-                logger.warn("知识库检索失败: kbId={}", knowledgeBaseId, e);
+                logger.warn("知识库混合检索失败: kbId={}", knowledgeBaseId, e);
             }
         }
 

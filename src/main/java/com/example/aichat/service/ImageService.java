@@ -23,6 +23,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Base64;
 import java.util.UUID;
 
 @Service
@@ -158,6 +159,68 @@ public class ImageService {
         String description = recognizeImage(imageUrl);
         String formattedDescription = formatImageDescription(imageUrl, description);
         return new ImageUploadResult(imageUrl, formattedDescription);
+    }
+
+    /**
+     * 直接识别图片字节数据（Base64 编码），不依赖 S3 上传。
+     * 用于 PDF 内嵌图片等离线场景。
+     */
+    public String recognizeImage(byte[] imageBytes, String prompt) throws Exception {
+        String base64 = Base64.getEncoder().encodeToString(imageBytes);
+        String dataUri = "data:image/png;base64," + base64;
+
+        ObjectNode requestBody = objectMapper.createObjectNode();
+        requestBody.put("model", imageProperties.getModel());
+
+        ArrayNode messagesArray = objectMapper.createArrayNode();
+
+        ObjectNode systemMsg = objectMapper.createObjectNode();
+        systemMsg.put("role", "system");
+        systemMsg.put("content", "You are a helpful assistant.");
+        messagesArray.add(systemMsg);
+
+        ObjectNode userMsg = objectMapper.createObjectNode();
+        userMsg.put("role", "user");
+        ArrayNode contentArray = objectMapper.createArrayNode();
+
+        ObjectNode textPart = objectMapper.createObjectNode();
+        textPart.put("type", "text");
+        textPart.put("text", prompt != null ? prompt : "请详细描述这张图片的内容。");
+        contentArray.add(textPart);
+
+        ObjectNode imagePart = objectMapper.createObjectNode();
+        imagePart.put("type", "image_url");
+        ObjectNode imageUrlObj = objectMapper.createObjectNode();
+        imageUrlObj.put("url", dataUri);
+        imagePart.set("image_url", imageUrlObj);
+        contentArray.add(imagePart);
+
+        userMsg.set("content", contentArray);
+        messagesArray.add(userMsg);
+        requestBody.set("messages", messagesArray);
+
+        String jsonBody = objectMapper.writeValueAsString(requestBody);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(imageProperties.getApiUrl()))
+                .header("Authorization", "Bearer " + imageProperties.getApiKey())
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .timeout(java.time.Duration.ofSeconds(30))
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() >= 400) {
+            logger.error("图片识别API返回错误: HTTP {} - {}", response.statusCode(), response.body());
+            throw new RuntimeException("图片识别失败: HTTP " + response.statusCode());
+        }
+
+        JsonNode root = objectMapper.readTree(response.body());
+        String content = root.get("choices").get(0).get("message").get("content").asText();
+        logger.debug("图片识别成功，描述长度: {}", content.length());
+        return content;
     }
 
     /**

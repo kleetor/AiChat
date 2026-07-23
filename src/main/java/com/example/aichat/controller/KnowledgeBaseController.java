@@ -27,7 +27,8 @@ public class KnowledgeBaseController {
     public ResponseEntity<?> create(@Valid @RequestBody KnowledgeBaseRequest req,
                                      Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
-        KnowledgeBase kb = kbService.create(req.getName(), req.getDescription(), userId);
+        KnowledgeBase kb = kbService.create(req.getName(), req.getDescription(),
+                req.getPromptTemplate(), req.getChunkSize(), req.getChunkOverlap(), userId);
         return ResponseEntity.ok(kb);
     }
 
@@ -44,7 +45,8 @@ public class KnowledgeBaseController {
                                      @Valid @RequestBody KnowledgeBaseRequest req,
                                      Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
-        KnowledgeBase kb = kbService.update(id, userId, req.getName(), req.getDescription());
+        KnowledgeBase kb = kbService.update(id, userId, req.getName(), req.getDescription(),
+                req.getPromptTemplate(), req.getChunkSize(), req.getChunkOverlap());
         return ResponseEntity.ok(kb);
     }
 
@@ -60,10 +62,11 @@ public class KnowledgeBaseController {
     @PostMapping("/{kbId}/docs/upload")
     public ResponseEntity<?> uploadDocument(@PathVariable Long kbId,
                                              @RequestParam("file") MultipartFile file,
+                                             @RequestParam(value = "forceOcr", defaultValue = "false") boolean forceOcr,
                                              Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
         try {
-            KbDocument doc = kbService.uploadDocument(kbId, userId, file);
+            KbDocument doc = kbService.uploadDocument(kbId, userId, file, forceOcr);
             return ResponseEntity.ok(doc);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
