@@ -21,6 +21,9 @@ public class GraphMemoryService {
 
     private static final Logger log = LoggerFactory.getLogger(GraphMemoryService.class);
 
+    /** 单次发送给 LLM 进行消歧的最大实体数 */
+    private static final int MAX_ENTITIES_FOR_LLM = 50;
+
     private final MemoryEntityRepository entityRepo;
     private final MemoryItemEntityRepository itemEntityRepo;
     private final MemoryRelationRepository relationRepo;
@@ -246,7 +249,7 @@ public class GraphMemoryService {
 
     /** 优化2: 将指定 sourceItem 的所有关系标记为过期 */
     @Transactional
-    public void expireRelations(Long itemId) {
+    public void expireRelations(Long itemId, Long userId) {
         int count = relationRepo.expireBySourceItemId(itemId, LocalDateTime.now());
         if (count > 0) {
             log.info("关系过期: sourceItemId={}, count={}", itemId, count);
@@ -255,13 +258,18 @@ public class GraphMemoryService {
 
     // ==================== 优化6: 实体消歧 ====================
 
-    /**
-     * 用 LLM 扫描用户所有实体，识别可合并的候选对（同人异名/简称全称等）。
+    /** 用 LLM 扫描用户所有实体，识别可合并的候选对（同人异名/简称全称等）。
+     * 限制最大实体数，防止超长列表导致 LLM 调用失败或费用过高。
      * @return 合并候选列表 [{fromId, toId}]，toId 为保留的目标实体
      */
     public List<MergeCandidate> suggestMerges(Long userId) {
         List<MemoryEntity> entities = entityRepo.findByUserId(userId);
         if (entities.size() < 2) return List.of();
+
+        // 限制发送给 LLM 的实体数量
+        if (entities.size() > MAX_ENTITIES_FOR_LLM) {
+            entities = entities.subList(0, MAX_ENTITIES_FOR_LLM);
+        }
 
         // 构建实体清单
         StringBuilder sb = new StringBuilder();
@@ -308,7 +316,7 @@ public class GraphMemoryService {
      * 在事务中执行，保证原子性。
      */
     @Transactional
-    public void mergeEntities(Long fromId, Long toId) {
+    public void mergeEntities(Long fromId, Long toId, Long userId) {
         if (fromId.equals(toId)) {
             log.warn("实体合并跳过: fromId == toId == {}", fromId);
             return;
@@ -319,6 +327,12 @@ public class GraphMemoryService {
         if (fromEntity == null || toEntity == null) {
             log.warn("实体合并跳过: 实体不存在 fromId={}, toId={}", fromId, toId);
             return;
+        }
+
+        // 校验两个实体均属于同一用户
+        if (!fromEntity.getUserId().equals(userId) || !toEntity.getUserId().equals(userId)) {
+            throw new com.example.aichat.config.BusinessException(
+                    org.springframework.http.HttpStatus.FORBIDDEN, "无权操作他人的实体");
         }
 
         log.info("实体合并开始: {} (id={}) → {} (id={})", fromEntity.getName(), fromId, toEntity.getName(), toId);

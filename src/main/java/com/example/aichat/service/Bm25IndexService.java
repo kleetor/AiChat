@@ -25,6 +25,9 @@ public class Bm25IndexService {
 
     private static final Logger log = LoggerFactory.getLogger(Bm25IndexService.class);
 
+    /** 单次查询最大长度，防止超长查询导致 DoS */
+    private static final int MAX_QUERY_LENGTH = 500;
+
     private final SmartChineseAnalyzer analyzer;
     private final IndexWriter writer;
 
@@ -87,6 +90,10 @@ public class Bm25IndexService {
      * promptId 为 null 时只匹配共享记忆(0)，非 null 时匹配共享+该角色。
      */
     public List<DocHit> search(Long userId, String query, int topK, Long promptId) {
+        if (query == null || query.isBlank()) return List.of();
+        if (query.length() > MAX_QUERY_LENGTH) {
+            query = query.substring(0, MAX_QUERY_LENGTH);
+        }
         try {
             DirectoryReader reader = DirectoryReader.open(writer);
             IndexSearcher searcher = new IndexSearcher(reader);

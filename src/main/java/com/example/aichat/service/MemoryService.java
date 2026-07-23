@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
 
 /**
  * 记忆业务逻辑 — 人类记忆模型的四种操作模式。
@@ -31,6 +32,14 @@ import java.util.concurrent.CompletableFuture;
 public class MemoryService {
 
     private static final Logger log = LoggerFactory.getLogger(MemoryService.class);
+
+    /** Prompt injection 模式，匹配则替换为 [已过滤] */
+    private static final Pattern INJECTION_PATTERN = Pattern.compile(
+            "(?i)(ignore\\s+(all\\s+)?(previous|above|prior)\\s+(instructions?|directives?|commands?|prompt)" +
+            "|you\\s+are\\s+(now\\s+)?(DAN|jailbreak|an?\\s+unrestricted)" +
+            "|\\[system\\]|system:\\s*(override|ignore|prompt)" +
+            "|<\\|im_start\\|>|<\\|im_end\\|>)",
+            Pattern.DOTALL);
 
     private final MemoryChromaService chromaService;
     private final MemoryItemRepository memoryRepo;
@@ -83,9 +92,11 @@ public class MemoryService {
             for (String line : result.split("\n")) {
                 line = line.strip();
                 if (line.isEmpty() || line.startsWith("NONE")) continue;
-                // 去格式前缀 "- " "1. " "·" 等
                 line = line.replaceFirst("^[-*\\d.·•]+\\s*", "");
                 if (line.isEmpty()) continue;
+
+                // 过滤 prompt injection 内容
+                line = sanitizeMemoryValue(line);
 
                 // 去重检查: 搜索相似记忆
                 var existing = chromaService.search(userId, line, 3);
@@ -343,7 +354,7 @@ public class MemoryService {
 
             // 优化2: 级联失效旧记忆关联的知识图谱关系
             try {
-                graphMemoryService.expireRelations(oldItem.getId());
+                graphMemoryService.expireRelations(oldItem.getId(), oldItem.getUserId());
             } catch (Exception e) {
                 log.warn("关系过期失败: itemId={}: {}", oldItem.getId(), e.getMessage());
             }
@@ -386,6 +397,8 @@ public class MemoryService {
     }
 
     public MemoryItem addManual(Long userId, String value) {
+        // 过滤 prompt injection
+        value = sanitizeMemoryValue(value);
         String chromaId = chromaService.addMemory(userId, value, Map.of("source", "manual"));
         return memoryRepo.save(MemoryItem.builder()
                 .userId(userId)
@@ -399,14 +412,16 @@ public class MemoryService {
 
     @Transactional
     public void update(Long id, Long userId, String newValue) {
+        // 过滤 prompt injection
+        final String sanitized = sanitizeMemoryValue(newValue);
         memoryRepo.findById(id).ifPresent(item -> {
             if (!item.getUserId().equals(userId)) return; // 归属校验
-            item.setValue(newValue);
-            item.setOriginalValue(newValue);
+            item.setValue(sanitized);
+            item.setOriginalValue(sanitized);
             item.setDetailLevel(DetailLevel.FULL);
             item.setLastAccessedAt(LocalDateTime.now());
             memoryRepo.save(item);
-            chromaService.updateMemory(item.getUserId(), item.getChromaId(), newValue);
+            chromaService.updateMemory(item.getUserId(), item.getChromaId(), sanitized);
         });
     }
 
@@ -432,9 +447,14 @@ public class MemoryService {
 
     @Transactional
     public void deleteAll(Long userId) {
-        // 先删除 MySQL 记录（事务可回滚），再删 ChromaDB
         memoryRepo.findByUserIdAndEnabledTrue(userId)
                 .forEach(memoryRepo::delete);
         chromaService.deleteAll(userId);
+    }
+
+    /** 过滤潜在的 LLM prompt injection 模式 */
+    static String sanitizeMemoryValue(String value) {
+        if (value == null) return null;
+        return INJECTION_PATTERN.matcher(value).replaceAll("[已过滤]");
     }
 }

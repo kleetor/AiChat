@@ -128,7 +128,7 @@ public class MessageContextBuilder {
 
                     StringBuilder sb = new StringBuilder("【关于用户的已知信息（最近）】\n");
                     for (var m : allMemories) {
-                        sb.append("- ").append(m.getValue()).append("\n");
+                        sb.append("- ").append(MemoryService.sanitizeMemoryValue(m.getValue())).append("\n");
                     }
                     ObjectNode memNode = messagesArray.addObject();
                     memNode.put("role", "system");

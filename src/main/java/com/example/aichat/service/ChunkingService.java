@@ -12,6 +12,15 @@ public class ChunkingService {
 
     private final RagProperties ragProperties;
 
+    /** 已知 LLM prompt injection 模式，匹配则过滤 */
+    private static final Pattern INJECTION_PATTERN = Pattern.compile(
+            "(?i)(ignore\\s+(all\\s+)?(previous|above|prior)\\s+(instructions?|directives?|commands?|prompt)" +
+            "|you\\s+are\\s+(now\\s+)?(DAN|jailbreak)" +
+            "|\\\\[system\\\\]" +
+            "|<script[^>]*>" +
+            "|system:\\s*(override|ignore))",
+            Pattern.DOTALL);
+
     public ChunkingService(RagProperties ragProperties) {
         this.ragProperties = ragProperties;
     }
@@ -41,6 +50,8 @@ public class ChunkingService {
      */
     private List<String> doSplit(String text, int chunkSize, int overlap) {
         if (text == null || text.isBlank()) return List.of();
+        // 过滤潜在的 prompt injection 模式，用 [已过滤] 替换
+        text = INJECTION_PATTERN.matcher(text).replaceAll("[已过滤]");
         String[] separators = {"\n\n", "\n", "。", "；", "，"};
         List<String> segments = new ArrayList<>();
         segments.add(text);

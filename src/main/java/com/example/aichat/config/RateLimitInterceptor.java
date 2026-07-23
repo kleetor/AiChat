@@ -177,6 +177,42 @@ public class RateLimitInterceptor implements HandlerInterceptor {
                 TimeUnit.DAYS.toMillis(1),
                 "prompt-image-update"
         ));
+
+        // 知识库文档重索引 10 次/天（防资源滥用）
+        rules.add(new RateLimitRule(
+                uri -> uri.matches("/api/kb/docs/\\d+/reindex"),
+                "POST",
+                10,
+                TimeUnit.DAYS.toMillis(1),
+                "kb-docs-reindex"
+        ));
+
+        // 记忆手动添加 30 次/天
+        rules.add(new RateLimitRule(
+                uri -> uri.equals("/api/memory/add"),
+                "POST",
+                30,
+                TimeUnit.DAYS.toMillis(1),
+                "memory-add"
+        ));
+
+        // 记忆搜索 30 次/分钟（高频操作）
+        rules.add(new RateLimitRule(
+                uri -> uri.equals("/api/memory/search"),
+                "POST",
+                30,
+                TimeUnit.MINUTES.toMillis(1),
+                "memory-search"
+        ));
+
+        // 清空记忆 3 次/天（破坏性操作）
+        rules.add(new RateLimitRule(
+                uri -> uri.equals("/api/memory/clear"),
+                "DELETE",
+                3,
+                TimeUnit.DAYS.toMillis(1),
+                "memory-clear"
+        ));
     }
 
     @Override

@@ -45,6 +45,8 @@ public class PdfParser implements DocumentParser {
 
     private static final Logger log = LoggerFactory.getLogger(PdfParser.class);
     private static final int MAX_PAGES = 100;
+    /** 单页渲染像素上限（100M pixels），防止解压炸弹 OOM */
+    private static final long MAX_PAGE_PIXELS = 100_000_000L;
     /** 页级并行阈值：超过此页数启用并行 OCR */
     private static final int PARALLEL_THRESHOLD = 5;
     /** PDFBox 提取文本有效性的最小有效字符数 */
@@ -465,6 +467,12 @@ public class PdfParser implements DocumentParser {
             for (int i = 0; i < totalPages; i++) {
                 BufferedImage image = renderer.renderImageWithDPI(i, ocrProps.getDpi());
                 try {
+                    // 像素上限检查：防止解压炸弹
+                    long pixels = (long) image.getWidth() * image.getHeight();
+                    if (pixels > MAX_PAGE_PIXELS) {
+                        log.warn("第 {} 页像素数 {} 超过上限，跳过", i + 1, pixels);
+                        continue;
+                    }
                     BufferedImage processed = preprocessor.preprocess(image);
                     String pageText = tesseract.doOCR(processed);
                     pageText = postProcessor.postProcess(pageText);
@@ -495,6 +503,11 @@ public class PdfParser implements DocumentParser {
                     try {
                         BufferedImage image = renderer.renderImageWithDPI(pageIdx, ocrProps.getDpi());
                         try {
+                            long pixels = (long) image.getWidth() * image.getHeight();
+                            if (pixels > MAX_PAGE_PIXELS) {
+                                log.warn("第 {} 页像素数 {} 超过上限，跳过", pageIdx + 1, pixels);
+                                return new IndexedPage(pageIdx, "");
+                            }
                             BufferedImage processed = preprocessor.preprocess(image);
                             String text = tesseract.doOCR(processed);
                             text = postProcessor.postProcess(text);

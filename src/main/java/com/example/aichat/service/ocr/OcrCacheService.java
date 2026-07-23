@@ -20,6 +20,8 @@ import java.util.Optional;
 public class OcrCacheService {
 
     private static final Logger log = LoggerFactory.getLogger(OcrCacheService.class);
+    /** 单条缓存最大字符数（约 1MB），防止缓存投毒 */
+    private static final int MAX_CACHE_SIZE = 1_000_000;
     private final Path cacheDir;
 
     public OcrCacheService() {
@@ -42,6 +44,13 @@ public class OcrCacheService {
         Path cacheFile = cacheDir.resolve(hash + ".txt");
         if (Files.exists(cacheFile)) {
             try {
+                // 校验缓存文件大小，防止投毒注入超大文件
+                long size = Files.size(cacheFile);
+                if (size > MAX_CACHE_SIZE) {
+                    log.warn("OCR 缓存文件过大 ({} bytes)，视为无效，删除: hash={}", size, hash.substring(0, 8));
+                    Files.delete(cacheFile);
+                    return Optional.empty();
+                }
                 String cached = Files.readString(cacheFile);
                 log.debug("OCR 缓存命中: hash={}", hash.substring(0, 8));
                 return Optional.of(cached);
@@ -54,6 +63,11 @@ public class OcrCacheService {
 
     public void put(byte[] fileBytes, String ocrResult) {
         if (ocrResult == null || ocrResult.isBlank()) return;
+        // 拒绝缓存超大结果
+        if (ocrResult.length() > MAX_CACHE_SIZE) {
+            log.warn("OCR 结果过大 ({} chars)，拒绝缓存", ocrResult.length());
+            return;
+        }
         String hash = sha256(fileBytes);
         Path cacheFile = cacheDir.resolve(hash + ".txt");
         try {

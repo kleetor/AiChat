@@ -23,8 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
 
 @Service
 public class KnowledgeBaseService {
@@ -43,8 +42,20 @@ public class KnowledgeBaseService {
     private static final Path UPLOAD_DIR = Paths.get("./uploads/kb");
     private static final long MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
     private static final int MAX_CHUNKS_PER_DOC = 500;
+    /** 单知识库最大文档数 */
+    private static final int MAX_DOCS_PER_KB = 200;
+    /** 单用户最大文档总数 */
+    private static final int MAX_DOCS_PER_USER = 1000;
+    /** 单用户最大存储占用（500MB） */
+    private static final long MAX_STORAGE_PER_USER = 500L * 1024 * 1024;
     /** 上传级强制 OCR 标志：docId → forceOcr */
     private final ConcurrentHashMap<Long, Boolean> forceOcrFlags = new ConcurrentHashMap<>();
+
+    /** 异步文档处理线程池（有界队列，防止任务积压耗尽内存） */
+    private final ExecutorService processExecutor = new ThreadPoolExecutor(
+            2, 4, 60L, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(20),
+            new ThreadPoolExecutor.CallerRunsPolicy());
 
     /** 文件头 Magic Bytes 校验：扩展名 → 预期文件头 */
     private static final Map<String, byte[]> MAGIC_BYTES = Map.of(
@@ -177,10 +188,14 @@ public class KnowledgeBaseService {
                 : "unknown";
         final String fileType = getFileType(fileName);
         if (file.getSize() > MAX_FILE_SIZE) {
-            throw BusinessException.badRequest("文件大小不能超过 10MB");
+            throw BusinessException.badRequest("文件大小不能超过 20MB");
         }
         // Magic Bytes 校验：防止文件类型伪装
         validateFileType(file, fileType);
+
+        // 配额检查
+        checkQuotas(kbId, userId, file.getSize());
+
         final String storedName = UUID.randomUUID() + "_" + fileName;
         Path targetPath = UPLOAD_DIR.resolve(storedName);
         file.transferTo(targetPath);
@@ -201,7 +216,7 @@ public class KnowledgeBaseService {
 
         // 异步处理（只传 docId，避免游离实体冲突）
         final Long docId = doc.getId();
-        CompletableFuture.runAsync(() -> processDocument(docId, targetPath));
+        processExecutor.submit(() -> processDocument(docId, targetPath));
         return doc;
     }
 
@@ -271,7 +286,7 @@ public class KnowledgeBaseService {
         KbDocument doc = docRepo.findById(docId).orElse(null);
         if (doc == null) return;
         Path filePath = UPLOAD_DIR.resolve(doc.getS3Key());
-        CompletableFuture.runAsync(() -> processDocument(reDocId, filePath));
+        processExecutor.submit(() -> processDocument(reDocId, filePath));
     }
 
     // ---------- 内部 ----------
@@ -407,7 +422,7 @@ public class KnowledgeBaseService {
     /** 验证文件头 Magic Bytes 是否与扩展名匹配 */
     private void validateFileType(MultipartFile file, String fileType) throws IOException {
         byte[] expected = MAGIC_BYTES.get(fileType);
-        if (expected == null) return; // 无校验规则，放行
+        if (expected == null) return;
 
         byte[] header = new byte[expected.length];
         int read = file.getInputStream().read(header);
@@ -421,5 +436,27 @@ public class KnowledgeBaseService {
             }
         }
         log.debug("Magic Bytes 校验通过: fileType={}", fileType);
+    }
+
+    /** 检查用户和知识库的存储配额 */
+    private void checkQuotas(Long kbId, Long userId, long fileSize) {
+        long kbCount = docRepo.countByKbId(kbId);
+        if (kbCount >= MAX_DOCS_PER_KB) {
+            throw BusinessException.badRequest(
+                    "该知识库文档数已达上限 " + MAX_DOCS_PER_KB);
+        }
+
+        long userCount = docRepo.countByUserId(userId);
+        if (userCount >= MAX_DOCS_PER_USER) {
+            throw BusinessException.badRequest(
+                    "您的文档总数已达上限 " + MAX_DOCS_PER_USER);
+        }
+
+        long userSize = docRepo.sumFileSizeByUserId(userId);
+        if (userSize + fileSize > MAX_STORAGE_PER_USER) {
+            throw BusinessException.badRequest(
+                    "您的存储空间不足（已用 " + (userSize / 1024 / 1024) + "MB，上限 " +
+                    (MAX_STORAGE_PER_USER / 1024 / 1024) + "MB）");
+        }
     }
 }
