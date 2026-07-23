@@ -4,7 +4,7 @@
 
 # HanaChat
 
-A multi-model AI chat platform built with Spring Boot 4 + React 19, featuring Tool Calling, RAG knowledge base, human-like long-term memory, friend system, token billing, and admin dashboard.
+A multi-model AI chat platform built with Spring Boot 4 + React 19, featuring Tool Calling, RAG knowledge base, human-like long-term memory, knowledge graph, friend system, token billing, and admin dashboard.
 
 ---
 
@@ -15,8 +15,8 @@ A multi-model AI chat platform built with Spring Boot 4 + React 19, featuring To
 | AI Chat | SSE streaming, multi-model switching, mid-response stop, context retention |
 | Tool Calling | AI autonomously invokes web search & image analysis via multi-round Tool Loop |
 | Prompt System | Custom System Prompts, community prompt hub with featured/likes |
-| RAG Knowledge Base | File upload → auto chunking → vectorization → ChromaDB semantic retrieval |
-| Long-term Memory | Human-like memory: four-tier decay, lazy decay, semantic recall |
+| RAG Knowledge Base | TXT/MD upload → auto chunking → vector+BM25 hybrid retrieval → Rerank ranking |
+| Long-term Memory | Human-like memory: four-tier decay, lazy decay, semantic recall, knowledge graph |
 | Friend System | PID search, friend requests/private chat, unread message badges |
 | Billing | Per-model token pricing, balance pre-deduction, sponsor top-up, daily check-in |
 | Admin Panel | User management, model config, usage stats, sponsor review, audit logs |
@@ -54,9 +54,9 @@ flowchart LR
 - **Parallel execution**: Multiple tools in the same round run concurrently via `CompletableFuture`
 - **Two-tier fallback**: Models without Tool Calling support automatically fall back to pre-injected search results
 
-### 2. Human-Like Long-Term Memory
+### 2. Human-Like Long-Term Memory System
 
-Four memory operation modes, simulating the natural decay of human memory:
+#### Four Memory Operation Modes
 
 | Mode | Trigger | Description |
 |------|---------|-------------|
@@ -67,6 +67,41 @@ Four memory operation modes, simulating the natural decay of human memory:
 
 ```
 Clear Phase (full text) → Fuzzy Phase (compressed summary) → Outline Phase (keywords) → Forgotten (archived)
+```
+
+#### Prompt-Scoped Isolation
+
+Memories are automatically isolated by System Prompt, enabling role-specific memory without multi-tenancy:
+
+| Memory Type | Description |
+|-------------|-------------|
+| Shared Memory | Cross-prompt general memories, accessible across all conversations |
+| Role-Specific Memory | Bound to a specific System Prompt, invisible to other roles |
+
+- **Auto-attribution**: New memories are automatically assigned to the current conversation's System Prompt
+- **Isolated injection**: Context assembly only injects memories matching the current prompt + shared memories
+- **Zero config**: No manual role grouping needed — memories automatically follow the prompt
+
+#### Knowledge Graph
+
+```
+Triple extraction → Entity nodes → Relationship edges → Bidirectional auto-append
+Entity disambiguation (LLM) → Manual merge → Temporal conflict detection
+```
+
+- LLM automatically extracts `(EntityA, Relation, EntityB)` triples from memory content
+- Synonymous entities can be manually merged with alias mapping
+- Detects temporal conflicts between old and new memories (e.g., "lives in Beijing" vs "moved to Shanghai")
+
+#### Hybrid Retrieval
+
+On-demand memory recall uses three-path retrieval + RRF fusion + Cross-Encoder reranking:
+
+```
+User Query → ChromaDB vector + Lucene BM25 keyword + Knowledge Graph entities
+          → RRF (Reciprocal Rank Fusion)
+          → Cross-Encoder Rerank
+          → Top-K results
 ```
 
 - **Semantic search**: ChromaDB vector similarity matching, not keyword-based
@@ -186,7 +221,9 @@ X-Frame-Options: DENY
 | Auth | Spring Security + JJWT 0.12.6 |
 | Cache | Caffeine |
 | Vector Database | ChromaDB |
+| Full-text Search | Lucene (BM25) + SmartChineseAnalyzer |
 | Embedding Model | SiliconFlow bge-large-zh-v1.5 (1024-dim) |
+| Rerank Model | BAAI/bge-reranker-v2-m3 (Cross-Encoder) |
 | HTTP Client | Apache HttpClient 5 |
 | Template Engine | Thymeleaf |
 | Frontend Framework | React 19 + TypeScript |
@@ -244,8 +281,7 @@ npm run dev
 
 | Entry | URL |
 |-------|-----|
-| Chat UI | `http://localhost:5173` |
-| API | `http://localhost:8080` |
+| Chat UI | `http://localhost:8080` |
 | Admin Panel | `http://localhost:8080/admin` |
 | Prompt Hub | `http://localhost:8080/workshop` |
 | KB Manager | `http://localhost:8080/kb-manager` |
@@ -285,10 +321,20 @@ aichat/
 │   │   ├── ChatStreamService.java       # SSE streaming core
 │   │   ├── MessageContextBuilder.java   # Context assembly
 │   │   ├── MemoryService.java           # Long-term memory (4 modes)
+│   │   ├── GraphMemoryService.java      # Knowledge graph + entity disambiguation
+│   │   ├── HybridRetrievalService.java  # 3-path recall + RRF + Rerank
 │   │   ├── ChromaDBService.java         # Vector DB operations
+│   │   ├── KbBm25IndexService.java      # KB Lucene BM25 index
+│   │   ├── Bm25IndexService.java        # Memory Lucene BM25 index
 │   │   ├── LLMService.java              # Low-level LLM calls
 │   │   ├── BillingService.java          # Optimistic-lock billing
 │   │   ├── AdminAuditLogService.java    # Async audit logging
+│   │   ├── KnowledgeBaseService.java    # KB core service
+│   │   ├── KbRetrievalService.java      # KB hybrid retrieval orchestrator
+│   │   ├── ChunkingService.java         # Recursive character split + injection filter
+│   │   ├── QueryRewriterService.java    # LLM query rewriting
+│   │   ├── parser/                      # Document parsers
+│   │   │   └── TxtParser.java           # TXT/MD plain text parser
 │   │   └── tool/                        # Tool Calling framework
 │   │       ├── ToolRegistry.java        # Tool registry
 │   │       ├── ToolHandler.java         # Tool interface
@@ -332,6 +378,18 @@ flowchart TB
         MCB[MessageContextBuilder]
     end
 
+    subgraph Memory["Long-term Memory"]
+        MS[MemoryService]
+        GM[GraphMemoryService]
+        HR[HybridRetrieval]
+    end
+
+    subgraph KB["RAG Knowledge Base"]
+        KBS[KnowledgeBaseService]
+        KBR[KbRetrievalService]
+        CHK[ChunkingService]
+    end
+
     subgraph AILayer["AI Capabilities"]
         LLM[LLM Service]
         TR[Tool Registry]
@@ -342,6 +400,7 @@ flowchart TB
     subgraph DataLayer["Data Layer"]
         DB[(MySQL)]
         CDB[(ChromaDB)]
+        LUC[(Lucene BM25)]
         Cache[(Caffeine)]
     end
 
@@ -353,11 +412,19 @@ flowchart TB
     CSS --> TR
     TR --> SW
     TR --> Img
-    MCB --> CDB
+    MCB --> MS
+    MCB --> KBR
+    MS --> GM
+    MS --> HR
+    KBR --> HR
+    HR --> CDB
+    HR --> LUC
     CS --> DB
 
     style Security fill:#fff3e0,color:#e65100
     style Core fill:#bbdefb,color:#0d47a1
+    style Memory fill:#e8f5e9,color:#1b5e20
+    style KB fill:#e3f2fd,color:#0d47a1
     style AILayer fill:#c8e6c9,color:#1a5e20
     style DataLayer fill:#f3e5f5,color:#7b1fa2
 ```

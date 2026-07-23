@@ -4,7 +4,7 @@
 
 # HanaChat
 
-基于 Spring Boot 4 + React 19 的多模型 AI 聊天平台，集成工具调用、RAG 知识库、仿人类长期记忆、好友系统、Token 计费及管理后台。
+基于 Spring Boot 4 + React 19 的多模型 AI 聊天平台，集成工具调用、RAG 知识库、仿人类长期记忆、知识图谱、好友系统、Token 计费及管理后台。
 
 ---
 
@@ -15,8 +15,8 @@
 | 智能对话 | SSE 流式输出、多模型动态切换、中途停止、上下文保持 |
 | 工具调用 | AI 自主调用联网搜索、图片分析，多轮 Tool Loop 自动编排 |
 | 提示词系统 | 自定义 System Prompt、提示词社区广场、精选/点赞 |
-| RAG 知识库 | 文件上传 → 自动分块 → 向量化 → ChromaDB 语义检索 |
-| 长期记忆 | 仿人类记忆模型：四级衰减、懒衰减、语义回溯 |
+| RAG 知识库 | TXT/MD 文档上传 → 自动分块 → 向量+BM25 混合检索 → Rerank 精排 |
+| 长期记忆 | 仿人类记忆模型：四级衰减、懒衰减、语义回溯、知识图谱 |
 | 好友系统 | PID 精准搜索、好友申请/私聊、未读消息红点 |
 | 计费系统 | Token 分模型计价、余额预扣、赞助充值、每日签到 |
 | 管理后台 | 用户管理、模型配置、消费统计、赞助审核、审计日志 |
@@ -54,9 +54,9 @@ flowchart LR
 - **并行执行**：同轮多个工具通过 `CompletableFuture` 并发调用
 - **双层降级**：不支持工具调用的模型自动走预注入搜索结果的降级路径
 
-### 2. 仿人类长期记忆模型
+### 2. 仿人类长期记忆系统
 
-四种记忆操作模式，模拟人类记忆的自然衰减过程：
+#### 四种记忆操作模式
 
 | 模式 | 触发时机 | 说明 |
 |------|---------|------|
@@ -67,6 +67,41 @@ flowchart LR
 
 ```
 清晰期（全文） → 模糊期（摘要压缩） → 轮廓期（关键词） → 遗忘（归档）
+```
+
+#### 提示词级隔离（Prompt-Scoped Isolation）
+
+记忆按提示词（System Prompt）自动隔离，无需多租户架构即可实现角色专属记忆：
+
+| 记忆类型 | 说明 |
+|---------|------|
+| 共享记忆 | 跨提示词通用记忆，同一用户的所有对话均可访问 |
+| 角色专属记忆 | 绑定到特定 System Prompt，不同角色互不可见 |
+
+- **自动归属**：新记忆默认归属到当前对话使用的 System Prompt
+- **隔离注入**：上下文构建时仅注入与当前 Prompt 匹配的记忆 + 共享记忆
+- **零配置**：用户无需手动管理角色分组，记忆自动跟随 Prompt
+
+#### 知识图谱
+
+```
+三元组提取 → 实体节点 → 实体间关系 → 双向边自动追加
+实体消歧建议 (LLM) → 手动合并 → 时态冲突检测
+```
+
+- LLM 从记忆内容中自动提取 `(实体A, 关系, 实体B)` 三元组
+- 同义实体可手动合并，建立实体别名映射
+- 检测新旧记忆中的时态冲突（如"居住北京" vs "搬到了上海"）
+
+#### 混合检索
+
+记忆按需检索采用三路召回 + RRF 融合 + Cross-Encoder 精排：
+
+```
+用户查询 → ChromaDB 向量检索 + Lucene BM25 关键词 + 知识图谱实体
+        → RRF (Reciprocal Rank Fusion) 融合
+        → Cross-Encoder Rerank 精排
+        → Top-K 结果
 ```
 
 - **语义检索**：ChromaDB 向量相似度匹配，非关键词匹配
@@ -90,7 +125,7 @@ HTTP Response → BufferedReader → SSE Line Parser → tool_calls Detection �
 联网搜索采用 Tavily + 千帆双引擎并发竞速策略：
 
 ```
-同时发起 Tavily 和千凡请求 → anyOf 取先返回的结果 → 超时/失败自动降级到另一方
+同时发起 Tavily 和千帆请求 → anyOf 取先返回的结果 → 超时/失败自动降级到另一方
 ```
 
 - `CompletableFuture.anyOf()` 实现真正的并发竞速
@@ -186,7 +221,9 @@ X-Frame-Options: DENY
 | 认证 | Spring Security + JJWT 0.12.6 |
 | 缓存 | Caffeine |
 | 向量数据库 | ChromaDB |
+| 全文检索 | Lucene (BM25) + SmartChineseAnalyzer |
 | 嵌入模型 | 硅基流动 bge-large-zh-v1.5 (1024 维) |
+| 精排模型 | BAAI/bge-reranker-v2-m3 (Cross-Encoder) |
 | HTTP 客户端 | Apache HttpClient 5 |
 | 模板引擎 | Thymeleaf |
 | 前端框架 | React 19 + TypeScript |
@@ -247,6 +284,9 @@ npm run dev
 | 聊天界面 | `http://localhost:8080` |
 | 管理后台 | `http://localhost:8080/admin` |
 | 提示词社区 | `http://localhost:8080/workshop` |
+| 知识库管理 | `http://localhost:8080/kb-manager` |
+| 记忆管理 | `http://localhost:8080/memory-manager` |
+
 ---
 
 ## 项目结构
@@ -281,10 +321,20 @@ aichat/
 │   │   ├── ChatStreamService.java       # SSE 流式核心
 │   │   ├── MessageContextBuilder.java   # 上下文拼装
 │   │   ├── MemoryService.java           # 长期记忆四模式
+│   │   ├── GraphMemoryService.java      # 知识图谱 + 实体消歧
+│   │   ├── HybridRetrievalService.java  # 三路召回 + RRF + Rerank
 │   │   ├── ChromaDBService.java         # 向量数据库操作
+│   │   ├── KbBm25IndexService.java      # 知识库 Lucene BM25 索引
+│   │   ├── Bm25IndexService.java        # 记忆 Lucene BM25 索引
 │   │   ├── LLMService.java              # 底层 LLM 调用
 │   │   ├── BillingService.java          # 乐观锁计费
 │   │   ├── AdminAuditLogService.java    # 异步审计日志
+│   │   ├── KnowledgeBaseService.java    # 知识库核心服务
+│   │   ├── KbRetrievalService.java      # 知识库混合检索编排
+│   │   ├── ChunkingService.java         # 递归字符分割 + injection 过滤
+│   │   ├── QueryRewriterService.java    # LLM 查询重写
+│   │   ├── parser/                      # 文档解析器
+│   │   │   └── TxtParser.java           # TXT/MD 纯文本解析
 │   │   └── tool/                        # 工具调用框架
 │   │       ├── ToolRegistry.java        # 工具注册中心
 │   │       ├── ToolHandler.java         # 工具接口
@@ -328,6 +378,18 @@ flowchart TB
         MCB[MessageContextBuilder]
     end
 
+    subgraph Memory["长期记忆"]
+        MS[MemoryService]
+        GM[GraphMemoryService]
+        HR[HybridRetrieval]
+    end
+
+    subgraph KB["RAG 知识库"]
+        KBS[KnowledgeBaseService]
+        KBR[KbRetrievalService]
+        CHK[ChunkingService]
+    end
+
     subgraph AILayer["AI 能力"]
         LLM[LLM Service]
         TR[Tool Registry]
@@ -338,6 +400,7 @@ flowchart TB
     subgraph DataLayer["数据层"]
         DB[(MySQL)]
         CDB[(ChromaDB)]
+        LUC[(Lucene BM25)]
         Cache[(Caffeine)]
     end
 
@@ -349,11 +412,19 @@ flowchart TB
     CSS --> TR
     TR --> SW
     TR --> Img
-    MCB --> CDB
+    MCB --> MS
+    MCB --> KBR
+    MS --> GM
+    MS --> HR
+    KBR --> HR
+    HR --> CDB
+    HR --> LUC
     CS --> DB
 
     style Security fill:#fff3e0,color:#e65100
     style Core fill:#bbdefb,color:#0d47a1
+    style Memory fill:#e8f5e9,color:#1b5e20
+    style KB fill:#e3f2fd,color:#0d47a1
     style AILayer fill:#c8e6c9,color:#1a5e20
     style DataLayer fill:#f3e5f5,color:#7b1fa2
 ```
