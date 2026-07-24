@@ -6,6 +6,8 @@ import com.example.aichat.model.KbDocument;
 import com.example.aichat.model.KnowledgeBase;
 import com.example.aichat.service.KnowledgeBaseService;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +19,8 @@ import java.io.IOException;
 @RestController
 @RequestMapping("/api/kb")
 public class KnowledgeBaseController {
+
+    private static final Logger logger = LoggerFactory.getLogger(KnowledgeBaseController.class);
 
     private final KnowledgeBaseService kbService;
 
@@ -70,7 +74,8 @@ public class KnowledgeBaseController {
             KbDocument doc = kbService.uploadDocument(kbId, userId, file);
             return ResponseEntity.ok(doc);
         } catch (IOException e) {
-            throw BusinessException.badRequest("文件上传失败: " + e.getMessage());
+            logger.error("文件上传失败", e);
+            throw BusinessException.badRequest("文件上传失败，请稍后重试");
         }
     }
 

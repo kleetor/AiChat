@@ -38,7 +38,15 @@ public class AdminSponsorController {
             @RequestBody Map<String, Object> body,
             @RequestAttribute("userId") Long reviewerId,
             HttpServletRequest request) {
-        BigDecimal tokens = new BigDecimal(body.get("tokens").toString());
+        BigDecimal tokens;
+        try {
+            tokens = new BigDecimal(body.get("tokens").toString());
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "金额格式无效"));
+        }
+        if (tokens.compareTo(new BigDecimal("1000000")) > 0 || tokens.compareTo(BigDecimal.ZERO) <= 0) {
+            return ResponseEntity.badRequest().body(Map.of("error", "金额超出允许范围"));
+        }
         String comment = body.getOrDefault("comment", "").toString();
         sponsorReviewService.approveSponsor(orderId, tokens, comment, reviewerId);
         // 记录审计日志

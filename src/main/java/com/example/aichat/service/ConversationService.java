@@ -46,9 +46,12 @@ public class ConversationService {
         return conversationRepository.findByUserIdOrderByCreatedAtDesc(userId);
     }
 
-    // 删除会话及其所有消息
+    // 删除会话及其所有消息（需传入 userId 做防御深度校验）
     @Transactional
-    public void deleteConversation(Long conversationId) {
+    public void deleteConversation(Long conversationId, Long userId) {
+        if (!belongsToUser(conversationId, userId)) {
+            throw BusinessException.forbidden("无权删除此会话");
+        }
         conversationRepository.deleteById(conversationId);
     }
 

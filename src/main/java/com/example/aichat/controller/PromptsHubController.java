@@ -72,6 +72,9 @@ public class PromptsHubController {
         if (q.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
+        if (q.length() > 200) {
+            return ResponseEntity.badRequest().build();
+        }
         Page<PromptsHub> prompts = promptsHubService.search(q, category, page, size);
         Map<Long, String> avatarMap = loadAvatarMap(prompts);
         return ResponseEntity.ok(prompts.map(p -> toSummaryMap(p, avatarMap)));
@@ -145,6 +148,9 @@ public class PromptsHubController {
         if (name == null || name.isBlank() || content == null || content.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
+        if (content.length() > 10000) {
+            return ResponseEntity.badRequest().build();
+        }
 
         PromptsHub prompt = promptsHubService.uploadPrompt(userId, name, content, userMessage);
         return ResponseEntity.ok(prompt);
@@ -163,11 +169,18 @@ public class PromptsHubController {
             return ResponseEntity.badRequest().body(Map.of("error", "name 和 content 不能为空"));
         }
         boolean publish = "true".equals(body.get("publish"));
+        String desc = body.get("description");
+        String cat = body.get("category");
+        String tags = body.get("tags");
+        if (desc != null && desc.length() > 500) {
+            return ResponseEntity.badRequest().body(Map.of("error", "描述长度不能超过500字符"));
+        }
+        if (tags != null && tags.length() > 500) {
+            return ResponseEntity.badRequest().body(Map.of("error", "标签长度不能超过500字符"));
+        }
         PromptsHub p = promptsHubService.createPrompt(
                 userId, name, content,
-                body.get("description"),
-                body.get("category"),
-                body.get("tags"),
+                desc, cat, tags,
                 body.get("modelSupport"),
                 body.get("userMessage"),
                 publish);
@@ -181,13 +194,20 @@ public class PromptsHubController {
                                                              Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
         boolean publish = "true".equals(body.get("publish"));
+        String desc = body.get("description");
+        String cat = body.get("category");
+        String tags = body.get("tags");
+        if (desc != null && desc.length() > 500) {
+            return ResponseEntity.badRequest().body(Map.of("error", "描述长度不能超过500字符"));
+        }
+        if (tags != null && tags.length() > 500) {
+            return ResponseEntity.badRequest().body(Map.of("error", "标签长度不能超过500字符"));
+        }
         PromptsHub p = promptsHubService.updatePrompt(
                 id, userId,
                 body.get("name"),
                 body.get("content"),
-                body.get("description"),
-                body.get("category"),
-                body.get("tags"),
+                desc, cat, tags,
                 body.get("modelSupport"),
                 body.get("userMessage"),
                 publish);
@@ -205,6 +225,12 @@ public class PromptsHubController {
         if (name == null || name.isBlank() || content == null || content.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
+        if (image != null && !image.isEmpty()) {
+            String contentType = image.getContentType();
+            if (contentType == null || !contentType.startsWith("image/")) {
+                return ResponseEntity.badRequest().build();
+            }
+        }
         try {
             PromptsHub prompt = promptsHubService.uploadPromptWithImage(userId, name, content, userMessage, image);
             return ResponseEntity.ok(prompt);
@@ -218,6 +244,12 @@ public class PromptsHubController {
             @PathVariable Long id,
             @RequestParam("image") MultipartFile image,
             Authentication auth) {
+        if (image != null && !image.isEmpty()) {
+            String contentType = image.getContentType();
+            if (contentType == null || !contentType.startsWith("image/")) {
+                return ResponseEntity.badRequest().body(Map.of("error", "只支持图片文件"));
+            }
+        }
         try {
             PromptsHub prompt = promptsHubService.updateImageUrl(id, image);
             return ResponseEntity.ok(Map.of("imageUrl", prompt.getImageUrl()));

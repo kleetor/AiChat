@@ -128,7 +128,7 @@ public class ChatService {
                 }
             }
 
-            chatHistoryService.saveMessage(conversationId, userMessage, result.getReply());
+            chatHistoryService.saveMessage(conversationId, userId, userMessage, result.getReply());
             updateConversationTitleIfNeeded(conversationId, userMessage);
 
             chatPostProcessor.triggerAsyncProcessing(userId, conversationId, userMessage, result.getReply(), longMemoryEnabled, promptId);

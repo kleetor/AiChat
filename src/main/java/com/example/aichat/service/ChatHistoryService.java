@@ -22,10 +22,13 @@ public class ChatHistoryService {
     @Autowired
     private ConversationRepository conversationRepository;
 
-    // 保存消息（需要传入 conversationId）
-    public ChatMessage saveMessage(Long conversationId, String userMessage, String aiReply) {
+    // 保存消息（需传入 conversationId，内部验证会话存在）
+    public ChatMessage saveMessage(Long conversationId, Long userId, String userMessage, String aiReply) {
         Conversation conv = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> BusinessException.notFound("会话不存在"));
+        if (!conv.getUser().getId().equals(userId)) {
+            throw BusinessException.forbidden("无权在此会话中保存消息");
+        }
         ChatMessage msg = ChatMessage.builder()
                 .user(conv.getUser())
                 .conversation(conv)

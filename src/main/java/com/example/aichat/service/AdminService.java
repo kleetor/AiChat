@@ -115,8 +115,14 @@ public class AdminService {
         return result;
     }
 
+    private static final java.util.Set<String> ALLOWED_SORT_FIELDS =
+            java.util.Set.of("id", "username", "email", "createdAt", "balance", "role");
+
     // ========== 用户列表查询 ==========
     public Page<User> getUsers(String keyword, int page, int size, String sortBy, String order) {
+        if (sortBy == null || !ALLOWED_SORT_FIELDS.contains(sortBy)) {
+            sortBy = "id";
+        }
         Sort sort = "desc".equalsIgnoreCase(order) ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
         Pageable pageable = PageRequest.of(page, size, sort);
         if (keyword != null && !keyword.isEmpty()) {

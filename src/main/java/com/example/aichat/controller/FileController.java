@@ -1,6 +1,8 @@
 package com.example.aichat.controller;
 
 import com.example.aichat.service.ImageService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -17,6 +19,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/file")
 public class FileController {
+
+    private static final Logger logger = LoggerFactory.getLogger(FileController.class);
 
     @Autowired
     private ImageService imageService;
@@ -46,8 +50,9 @@ public class FileController {
             response.put("fileName", fileName != null ? fileName : "unknown");
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            logger.error("文件上传失败", e);
             Map<String, String> error = new HashMap<>();
-            error.put("error", "文件上传失败: " + e.getMessage());
+            error.put("error", "文件上传失败，请稍后重试");
             return ResponseEntity.status(500).body(error);
         }
     }

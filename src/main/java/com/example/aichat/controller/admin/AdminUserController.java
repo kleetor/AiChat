@@ -55,6 +55,9 @@ public class AdminUserController {
             return ResponseEntity.badRequest().body(Map.of("error", "金额不能为空"));
         }
         BigDecimal amount = new BigDecimal(amountObj.toString());
+        if (amount.compareTo(new BigDecimal("-100000")) < 0 || amount.compareTo(new BigDecimal("100000")) > 0) {
+            return ResponseEntity.badRequest().body(Map.of("error", "金额超出允许范围（-100000 ~ 100000）"));
+        }
         String reason = body.getOrDefault("reason", "管理员手动操作").toString();
         adminUserService.updateUserBalance(id, amount, reason, reviewerId);
         // 记录审计日志

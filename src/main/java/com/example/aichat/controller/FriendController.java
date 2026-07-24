@@ -27,7 +27,7 @@ public class FriendController {
 
     /** 发送好友申请 */
     @PostMapping("/request")
-    public ResponseEntity<?> sendRequest(@RequestBody FriendRequestDTO body, Authentication auth) {
+    public ResponseEntity<?> sendRequest(@Valid @RequestBody FriendRequestDTO body, Authentication auth) {
         Long fromUserId = (Long) auth.getPrincipal();
         friendService.sendFriendRequest(fromUserId, body.getUserId());
         return ResponseEntity.ok(Map.of("message", "申请已发送"));
@@ -35,7 +35,7 @@ public class FriendController {
 
     /** 接受好友申请 */
     @PostMapping("/accept")
-    public ResponseEntity<?> acceptRequest(@RequestBody FriendRequestDTO body, Authentication auth) {
+    public ResponseEntity<?> acceptRequest(@Valid @RequestBody FriendRequestDTO body, Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
         friendService.acceptRequest(body.getFriendshipId(), userId);
         return ResponseEntity.ok(Map.of("message", "已接受"));
@@ -43,7 +43,7 @@ public class FriendController {
 
     /** 拒绝好友申请 */
     @PostMapping("/reject")
-    public ResponseEntity<?> rejectRequest(@RequestBody FriendRequestDTO body, Authentication auth) {
+    public ResponseEntity<?> rejectRequest(@Valid @RequestBody FriendRequestDTO body, Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
         friendService.rejectRequest(body.getFriendshipId(), userId);
         return ResponseEntity.ok(Map.of("message", "已拒绝"));
@@ -65,7 +65,7 @@ public class FriendController {
 
     /** 发送消息 */
     @PostMapping("/message")
-    public ResponseEntity<?> sendMessage(@RequestBody FriendRequestDTO body, Authentication auth) {
+    public ResponseEntity<?> sendMessage(@Valid @RequestBody FriendRequestDTO body, Authentication auth) {
         Long senderId = (Long) auth.getPrincipal();
         if (body.getContent() == null || body.getContent().isBlank()) {
             return ResponseEntity.badRequest().build();

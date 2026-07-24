@@ -24,10 +24,7 @@ export function getToken(): string | null {
 }
 
 export function setToken(token: string): void {
-  // 双写：保证登录后两种模式都能读到 Token
   getStorage().setItem(TOKEN_KEY, token);
-  const other = isRememberMe() ? sessionStorage : localStorage;
-  other.setItem(TOKEN_KEY, token);
 }
 
 export function clearToken(): void {
@@ -93,7 +90,11 @@ async function request<T>(
 
   const text = await res.text();
   if (!text) return undefined as T;
-  return JSON.parse(text) as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiError(res.status, `Invalid JSON response: ${text.slice(0, 100)}`);
+  }
 }
 
 export function apiGet<T>(url: string): Promise<T> {
@@ -175,7 +176,7 @@ export function apiStream(
                 yield parsed.content;
               }
             } catch {
-              yield data;
+              // 跳过无法解析的帧，不传递原始数据
             }
           }
         }

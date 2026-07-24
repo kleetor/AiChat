@@ -19,5 +19,6 @@ public class RegisterRequest {
     @Size(min = 8, message = "密码长度至少 8 位")
     private String password;
 
+    @NotBlank(message = "验证码不能为空")
     private String code;
 }

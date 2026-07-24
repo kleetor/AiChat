@@ -27,10 +27,13 @@ public class WebConfig implements WebMvcConfigurer {
     @Value("${upload.url-prefix:/uploads/images}")
     private String uploadUrlPrefix;
 
+    @Value("${cors.allowed-origins:http://localhost:5173,http://localhost:8080}")
+    private String allowedOrigins;
+
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOriginPatterns("*")
+                .allowedOriginPatterns(allowedOrigins.split(","))
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*");
     }
@@ -90,7 +93,7 @@ public class WebConfig implements WebMvcConfigurer {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(java.util.List.of("*"));
+        configuration.setAllowedOriginPatterns(java.util.List.of(allowedOrigins.split(",")));
         configuration.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(java.util.List.of("*"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -123,7 +123,7 @@ public class AuthController {
     }
 
     @PostMapping("/update-profile")
-    public ResponseEntity<?> updateProfile(@RequestBody UpdateProfileRequest request,
+    public ResponseEntity<?> updateProfile(@Valid @RequestBody UpdateProfileRequest request,
                                            Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         String signature = request.getSignature();

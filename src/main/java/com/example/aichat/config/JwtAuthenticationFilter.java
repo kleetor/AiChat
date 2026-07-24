@@ -60,6 +60,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Long userId = jwtUtil.getUserIdFromToken(token);
                 String role = jwtUtil.getRoleFromToken(token);
                 if (role == null) role = "USER";
+                if (!List.of("USER", "ADMIN").contains(role)) {
+                    throw new BadCredentialsException("Token角色非法");
+                }
                 logger.debug("JWT过滤器 - 用户ID: {}, 角色: {}", userId, role);
 
                 // 检查用户是否被禁用

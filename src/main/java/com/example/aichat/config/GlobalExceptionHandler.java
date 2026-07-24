@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -77,6 +78,15 @@ public class GlobalExceptionHandler {
         response.put("success", false);
         response.put("message", e.getMessage());
         return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED).body(response);
+    }
+
+    /** 权限不足 */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException e) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", false);
+        response.put("message", "权限不足");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
     }
 
     /** 兜底 — 未预料的运行时异常，记录日志但不暴露内部错误信息 */

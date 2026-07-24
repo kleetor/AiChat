@@ -153,9 +153,9 @@ public class ChatStreamService {
         if (apiKey != null && apiKey.startsWith("AES:")) {
             logger.error("ModelConfig id={} 的 API Key 解密失败！", modelConfigId);
         }
-        logger.debug("ChatStreamService 使用 ModelConfig: id={}, displayName={}, apiUrl={}, apiKey前6位={}, model={}",
+        logger.debug("ChatStreamService 使用 ModelConfig: id={}, displayName={}, apiUrl={}, apiKeyConfigured={}, model={}",
                 modelConfigId, config.getDisplayName(), apiUrl,
-                apiKey != null ? apiKey.substring(0, Math.min(6, apiKey.length())) : "null",
+                apiKey != null,
                 modelName);
 
         Runnable task = () -> {
@@ -219,7 +219,7 @@ public class ChatStreamService {
                     String completeResponse = fullResponse.toString();
                     Long savedMessageId = null;
                     if (!completeResponse.isEmpty()) {
-                        ChatMessage saved = chatHistoryService.saveMessage(conversationId, userMessage, completeResponse);
+                        ChatMessage saved = chatHistoryService.saveMessage(conversationId, userId, userMessage, completeResponse);
                         savedMessageId = saved.getId();
                         updateConversationTitleIfNeeded(conversationId, userMessage);
                     }

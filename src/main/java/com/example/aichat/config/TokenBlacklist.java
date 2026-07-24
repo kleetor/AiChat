@@ -56,11 +56,16 @@ public class TokenBlacklist {
 
     public boolean isBlacklisted(String token) {
         String hash = sha256(token);
-        if (blacklist.getIfPresent(hash) != null) {
-            return true;
+        Boolean cached = blacklist.getIfPresent(hash);
+        if (cached != null) {
+            return cached;
         }
-        // 内存未命中时回退查询 DB（处理服务重启场景）
-        return blacklistRepo.existsByTokenHash(hash);
+        // 内存未命中时回退查询 DB（处理服务重启场景），并缓存结果避免重复 DB 查询
+        boolean blacklisted = blacklistRepo.existsByTokenHash(hash);
+        if (!blacklisted) {
+            blacklist.put(hash, Boolean.FALSE);
+        }
+        return blacklisted;
     }
 
     @Scheduled(fixedRate = 3600000) // 每小时清理过期记录

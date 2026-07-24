@@ -133,6 +133,15 @@ public class RateLimitInterceptor implements HandlerInterceptor {
                 "auth-reset-password"
         ));
 
+        // 修改密码 5 次/分钟（防暴力枚举）
+        rules.add(new RateLimitRule(
+                uri -> uri.equals("/api/auth/change-password"),
+                "POST",
+                5,
+                TimeUnit.MINUTES.toMillis(1),
+                "auth-change-password"
+        ));
+
         // 头像上传 3 次/天
         rules.add(new RateLimitRule(
                 uri -> uri.equals("/api/auth/upload-avatar"),

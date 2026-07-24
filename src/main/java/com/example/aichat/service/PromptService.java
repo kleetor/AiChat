@@ -73,4 +73,13 @@ public class PromptService {
         return promptRepository.findById(promptId)
                 .orElseThrow(() -> BusinessException.notFound("提示词不存在"));
     }
+
+    public Prompt getPromptByIdAndUser(Long promptId, Long userId) {
+        Prompt prompt = promptRepository.findById(promptId)
+                .orElseThrow(() -> BusinessException.notFound("提示词不存在"));
+        if (!prompt.getUser().getId().equals(userId)) {
+            throw BusinessException.forbidden("无权访问此提示词");
+        }
+        return prompt;
+    }
 }

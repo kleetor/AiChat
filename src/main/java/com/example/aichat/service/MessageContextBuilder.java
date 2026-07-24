@@ -88,7 +88,9 @@ public class MessageContextBuilder {
         // 1. 注入 Prompt (用户个人提示词)
         if (promptId != null) {
             try {
-                Prompt prompt = promptService.getPromptById(promptId);
+                Prompt prompt = userId != null
+                        ? promptService.getPromptByIdAndUser(promptId, userId)
+                        : promptService.getPromptById(promptId);
                 ObjectNode systemNode = messagesArray.addObject();
                 systemNode.put("role", "system");
                 systemNode.put("content", prompt.getContent());

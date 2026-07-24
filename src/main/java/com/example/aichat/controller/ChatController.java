@@ -144,7 +144,7 @@ public class ChatController {
         if (!conversationService.belongsToUser(id, userId)) {
             return ResponseEntity.status(403).body("无权限");
         }
-        conversationService.deleteConversation(id);
+        conversationService.deleteConversation(id, userId);
         return ResponseEntity.ok().build();
     }
 

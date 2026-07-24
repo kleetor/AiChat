@@ -27,6 +27,7 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-}
       MYSQL_DATABASE: ai_chat_db
       TZ: Asia/Shanghai
+    # 如无需从宿主机直接连 MySQL，可将 ports 整行注释
     ports:
       - "3307:3306"
     volumes:
@@ -57,16 +58,16 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
-      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@aichat.com}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:?ADMIN_USERNAME is required}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL is required}
       MEMORY_LLM_API_KEY: ${MEMORY_LLM_API_KEY:-}
       MEMORY_LLM_API_URL: ${MEMORY_LLM_API_URL:-https://api.deepseek.com/v1/chat/completions}
       MEMORY_LLM_MODEL_NAME: ${MEMORY_LLM_MODEL_NAME:-deepseek-chat}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
       S3_URL_PREFIX: ${S3_URL_PREFIX:-}
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_chat_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_chat_db?useSSL=true&requireSSL=true&verifyServerCertificate=false&serverTimezone=Asia/Shanghai
       CHROMADB_URL: http://chromadb:8000
       SPRING_PROFILES_ACTIVE: prod
     depends_on:

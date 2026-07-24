@@ -65,7 +65,7 @@ public class SecurityConfig {
                         .contentSecurityPolicy(csp -> csp
                                 .policyDirectives(
                                         "default-src 'self'; " +
-                                        "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; " +
+                                        "script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; " +
                                         "style-src 'self' 'unsafe-inline'; " +
                                         "img-src 'self' data: blob: https:; " +
                                         "font-src 'self'; " +

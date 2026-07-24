@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
 public class ApiKeyEncryptor implements AttributeConverter<String, String> {
 
     private static final Logger logger = LoggerFactory.getLogger(ApiKeyEncryptor.class);
-    private static final String ENCRYPTED_PREFIX = "AES:";
+    private static final String ENCRYPTED_PREFIX = "ENC:";
 
     @Override
     public String convertToDatabaseColumn(String plainApiKey) {
@@ -33,9 +33,9 @@ public class ApiKeyEncryptor implements AttributeConverter<String, String> {
             if (decrypted != null) {
                 return decrypted;
             }
-            // 解密失败（密钥不匹配），返回原文让迁移程序用正确密钥重新加密
-            logger.warn("API Key 解密失败，保留密文原文等待迁移重新加密: id in model_configs");
-            return dbValue;
+            // 解密失败（密钥不匹配），返回 null 让下游处理
+            logger.warn("API Key 解密失败（密钥可能已变更），返回 null: id in model_configs");
+            return null;
         }
         // 兼容历史明文数据
         logger.warn("检测到数据库中仍有明文 API Key，建议重新保存 ModelConfig 完成加密迁移");

@@ -27,7 +27,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Random;
 
 @Service
 public class BillingService {
@@ -224,7 +223,7 @@ public class BillingService {
 
     private String generateOrderNo() {
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-        int random = new Random().nextInt(10000);
+        int random = new java.security.SecureRandom().nextInt(10000);
         return "RC" + timestamp + String.format("%04d", random);
     }
 
