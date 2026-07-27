@@ -5,6 +5,8 @@ services:
     restart: always
     ports:
       - "8000:8000"
+    mem_limit: 384m
+    mem_reservation: 256m
     volumes:
       - chroma_data:/chroma/chroma
     environment:
@@ -23,6 +25,8 @@ services:
     image: mysql:8.0
     container_name: aichat-mysql
     restart: always
+    mem_limit: 1024m
+    mem_reservation: 512m
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-}
       MYSQL_DATABASE: ai_chat_db
@@ -47,8 +51,9 @@ services:
     ports:
       - "8080:8080"
     mem_limit: 1536m
-    mem_reservation: 512m
+    mem_reservation: 768m
     environment:
+      JAVA_TOOL_OPTIONS: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:MaxRAMPercentage=60"
       DB_PASSWORD: ${DB_PASSWORD:-}
       JWT_SECRET: ${JWT_SECRET:-}
       QIANFAN_API_KEY: ${QIANFAN_API_KEY:-}

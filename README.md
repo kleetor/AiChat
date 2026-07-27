@@ -15,7 +15,7 @@
 | 智能对话 | SSE 流式输出、多模型动态切换、中途停止、上下文保持 |
 | 工具调用 | AI 自主调用联网搜索、图片分析，多轮 Tool Loop 自动编排 |
 | 提示词系统 | 自定义 System Prompt、提示词社区广场、精选/点赞 |
-| RAG 知识库 | TXT/MD 文档上传 → 自动分块 → 向量+BM25 混合检索 → Rerank 精排 |
+| RAG 知识库 | TXT/MD 文档上传 → 自动分块 → 向量检索 → Rerank 精排 |
 | 长期记忆 | 仿人类记忆模型：四级衰减、懒衰减、语义回溯、知识图谱 |
 | 好友系统 | PID 精准搜索、好友申请/私聊、未读消息红点 |
 | 计费系统 | Token 分模型计价、余额预扣、赞助充值、每日签到 |
@@ -95,10 +95,10 @@ flowchart LR
 
 #### 混合检索
 
-记忆按需检索采用三路召回 + RRF 融合 + Cross-Encoder 精排：
+记忆按需检索采用两路召回 + RRF 融合 + Cross-Encoder 精排：
 
 ```
-用户查询 → ChromaDB 向量检索 + Lucene BM25 关键词 + 知识图谱实体
+用户查询 → ChromaDB 向量检索 + 知识图谱实体
         → RRF (Reciprocal Rank Fusion) 融合
         → Cross-Encoder Rerank 精排
         → Top-K 结果
@@ -221,7 +221,6 @@ X-Frame-Options: DENY
 | 认证 | Spring Security + JJWT 0.12.6 |
 | 缓存 | Caffeine |
 | 向量数据库 | ChromaDB |
-| 全文检索 | Lucene (BM25) + SmartChineseAnalyzer |
 | 嵌入模型 | 硅基流动 bge-large-zh-v1.5 (1024 维) |
 | 精排模型 | BAAI/bge-reranker-v2-m3 (Cross-Encoder) |
 | HTTP 客户端 | Apache HttpClient 5 |
@@ -322,10 +321,8 @@ aichat/
 │   │   ├── MessageContextBuilder.java   # 上下文拼装
 │   │   ├── MemoryService.java           # 长期记忆四模式
 │   │   ├── GraphMemoryService.java      # 知识图谱 + 实体消歧
-│   │   ├── HybridRetrievalService.java  # 三路召回 + RRF + Rerank
+│   │   ├── HybridRetrievalService.java  # 两路召回 + RRF + Rerank
 │   │   ├── ChromaDBService.java         # 向量数据库操作
-│   │   ├── KbBm25IndexService.java      # 知识库 Lucene BM25 索引
-│   │   ├── Bm25IndexService.java        # 记忆 Lucene BM25 索引
 │   │   ├── LLMService.java              # 底层 LLM 调用
 │   │   ├── BillingService.java          # 乐观锁计费
 │   │   ├── AdminAuditLogService.java    # 异步审计日志
@@ -400,7 +397,6 @@ flowchart TB
     subgraph DataLayer["数据层"]
         DB[(MySQL)]
         CDB[(ChromaDB)]
-        LUC[(Lucene BM25)]
         Cache[(Caffeine)]
     end
 

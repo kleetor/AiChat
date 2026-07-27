@@ -30,7 +30,7 @@ build/
 !**/src/test/**/build/
 
 ### VS Code ###
-#.vscode/
+.vscode/
 
 ### Environment ###
 .env
@@ -43,9 +43,6 @@ uploads/**
 
 ### ChromaDB ###
 chroma_data/
-
-### BM25 Index ###
-data/
 
 ### Temp files ###
 query

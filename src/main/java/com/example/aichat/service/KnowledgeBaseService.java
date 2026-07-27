@@ -33,7 +33,6 @@ public class KnowledgeBaseService {
     private final KnowledgeBaseRepository kbRepo;
     private final KbDocumentRepository docRepo;
     private final ChromaDBService chromaDBService;
-    private final KbBm25IndexService bm25Service;
     private final ChunkingService chunkingService;
     private final List<DocumentParser> parsers;
     private final TransactionTemplate transactionTemplate;
@@ -59,7 +58,6 @@ public class KnowledgeBaseService {
     public KnowledgeBaseService(KnowledgeBaseRepository kbRepo,
                                  KbDocumentRepository docRepo,
                                  ChromaDBService chromaDBService,
-                                 KbBm25IndexService bm25Service,
                                  ChunkingService chunkingService,
                                  List<DocumentParser> parsers,
                                  PlatformTransactionManager transactionManager,
@@ -67,7 +65,6 @@ public class KnowledgeBaseService {
         this.kbRepo = kbRepo;
         this.docRepo = docRepo;
         this.chromaDBService = chromaDBService;
-        this.bm25Service = bm25Service;
         this.chunkingService = chunkingService;
         this.parsers = parsers;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -154,7 +151,6 @@ public class KnowledgeBaseService {
             throw BusinessException.forbidden("无权删除该知识库");
         }
         chromaDBService.deleteCollection(kbId);
-        bm25Service.deleteIndex(kbId);
         kbRepo.delete(kb);
     }
 
@@ -228,7 +224,6 @@ public class KnowledgeBaseService {
             throw BusinessException.forbidden("无权删除该文档");
         }
         chromaDBService.deleteByDocument(doc.getKbId(), doc.getId());
-        bm25Service.removeByDocument(doc.getKbId(), doc.getId());
         docRepo.deleteById(doc.getId());
         kbRepo.decrementCounts(doc.getKbId(), 1, doc.getChunkCount(), doc.getFileSize());
 
@@ -251,9 +246,8 @@ public class KnowledgeBaseService {
                 throw BusinessException.forbidden("无权操作该文档");
             }
 
-            // 删除旧向量和 BM25 索引
+            // 删除旧向量索引
             chromaDBService.deleteByDocument(doc.getKbId(), doc.getId());
-            bm25Service.removeByDocument(doc.getKbId(), doc.getId());
             kbRepo.decrementCounts(doc.getKbId(), 0, doc.getChunkCount(), 0);
 
             // 重新处理
@@ -325,7 +319,6 @@ public class KnowledgeBaseService {
                 chunks = null;
 
                 chromaDBService.addChunks(doc.getKbId(), dataList);
-                bm25Service.indexChunks(doc.getKbId(), dataList);
                 // 索引完成后释放 dataList
                 dataList = null;
                 System.gc();

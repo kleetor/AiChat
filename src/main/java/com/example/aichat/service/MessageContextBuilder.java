@@ -159,7 +159,7 @@ public class MessageContextBuilder {
             }
         }
 
-        // 4. 注入知识库检索（混合检索：向量 + BM25 → RRF 融合 → Rerank 精排）
+        // 4. 注入知识库检索（向量召回 → Rerank 精排）
         if (knowledgeBaseId != null) {
             try {
                 ChromaDBService.QueryResult qr = kbRetrievalService.hybridSearch(

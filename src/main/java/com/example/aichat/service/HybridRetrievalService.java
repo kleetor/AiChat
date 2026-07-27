@@ -10,12 +10,11 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 混合检索编排服务：三路召回 → RRF 融合 → Rerank 精排。
+ * 混合检索编排服务：两路召回 → RRF 融合 → Rerank 精排。
  *
- * 三路信号：
- *   - ChromaDB 语义向量（已有）
- *   - Lucene BM25 关键词（新增）
- *   - 知识图谱实体匹配（新增）
+ * 两路信号：
+ *   - ChromaDB 语义向量
+ *   - 知识图谱实体匹配
  *
  * 容错：任一路失败不影响其他路，Rerank 失败则降级返回 RRF 结果。
  */
@@ -27,18 +26,15 @@ public class HybridRetrievalService {
     private static final int CANDIDATE_SIZE = 30;
 
     private final MemoryChromaService chromaService;
-    private final Bm25IndexService bm25Service;
     private final EntityRetrievalService entityService;
     private final SiliconFlowRerankService rerankService;
     private final MemoryItemRepository memoryRepo;
 
     public HybridRetrievalService(MemoryChromaService chromaService,
-                                   Bm25IndexService bm25Service,
                                    EntityRetrievalService entityService,
                                    SiliconFlowRerankService rerankService,
                                    MemoryItemRepository memoryRepo) {
         this.chromaService = chromaService;
-        this.bm25Service = bm25Service;
         this.entityService = entityService;
         this.rerankService = rerankService;
         this.memoryRepo = memoryRepo;
@@ -54,23 +50,19 @@ public class HybridRetrievalService {
      * @return 精排后的记忆列表
      */
     public List<MemoryItem> hybridSearch(Long userId, String query, int finalTopK, Long promptId) {
-        // === Phase 1: 三路并行召回 ===
+        // === Phase 1: 两路并行召回 ===
         var chromaFuture = CompletableFuture.supplyAsync(
                 () -> safeChromaSearch(userId, query));
-        var bm25Future = CompletableFuture.supplyAsync(
-                () -> bm25Service.search(userId, query, CANDIDATE_SIZE, promptId));
         var entityFuture = CompletableFuture.supplyAsync(
                 () -> entityService.searchByEntities(userId, query, CANDIDATE_SIZE));
 
         List<MemoryChromaService.MemoryHit> chromaHits = chromaFuture.join();
-        List<Bm25IndexService.DocHit> bm25Hits = bm25Future.join();
         List<EntityRetrievalService.ScoredItem> entityHits = entityFuture.join();
 
-        log.debug("混合召回: chroma={}, bm25={}, entity={}",
-                chromaHits.size(), bm25Hits.size(), entityHits.size());
+        log.debug("混合召回: chroma={}, entity={}", chromaHits.size(), entityHits.size());
 
         // === Phase 2: RRF 融合 ===
-        Map<Long, Double> fused = rrfFusion(chromaHits, bm25Hits, entityHits);
+        Map<Long, Double> fused = rrfFusion(chromaHits, entityHits);
 
         List<Long> candidateIds = fused.entrySet().stream()
                 .sorted(Map.Entry.<Long, Double>comparingByValue().reversed())
@@ -114,12 +106,11 @@ public class HybridRetrievalService {
     }
 
     /**
-     * Reciprocal Rank Fusion: 无超参数的三路分数融合。
+     * Reciprocal Rank Fusion: 无超参数的两路分数融合。
      * score(doc) = Σ 1 / (K + rank_i)
-     * 一条文档在三路中的排名越靠前，融合分数越高。
      */
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private Map<Long, Double> rrfFusion(List chromaHits, List bm25Hits, List entityHits) {
+    private Map<Long, Double> rrfFusion(List chromaHits, List entityHits) {
         Map<Long, Double> scores = new HashMap<>();
 
         // ChromaDB: score 越高越相关，转为排名
@@ -128,12 +119,6 @@ public class HybridRetrievalService {
             final double rank = i;
             memoryRepo.findByChromaId(hit.chromaId()).ifPresent(
                     m -> scores.merge(m.getId(), 1.0 / (RRF_K + rank + 1), Double::sum));
-        }
-
-        // BM25: score 越高越相关
-        for (int i = 0; i < bm25Hits.size(); i++) {
-            Bm25IndexService.DocHit hit = (Bm25IndexService.DocHit) bm25Hits.get(i);
-            scores.merge(hit.itemId(), 1.0 / (RRF_K + i + 1), Double::sum);
         }
 
         // 实体匹配

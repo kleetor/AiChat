@@ -47,22 +47,19 @@ public class MemoryService {
     private final MemoryProperties memoryProperties;
     private final GraphMemoryService graphMemoryService;
     private final HybridRetrievalService hybridRetrievalService;
-    private final Bm25IndexService bm25Service;
 
     public MemoryService(MemoryChromaService chromaService,
                          MemoryItemRepository memoryRepo,
                          LLMService llmService,
                          MemoryProperties memoryProperties,
                          GraphMemoryService graphMemoryService,
-                         HybridRetrievalService hybridRetrievalService,
-                         Bm25IndexService bm25Service) {
+                         HybridRetrievalService hybridRetrievalService) {
         this.chromaService = chromaService;
         this.memoryRepo = memoryRepo;
         this.llmService = llmService;
         this.memoryProperties = memoryProperties;
         this.graphMemoryService = graphMemoryService;
         this.hybridRetrievalService = hybridRetrievalService;
-        this.bm25Service = bm25Service;
     }
 
     // ==================== 模式1: 自动提取 ====================
@@ -134,13 +131,6 @@ public class MemoryService {
                 } catch (Exception e) {
                     log.warn("时态冲突检测失败: id={}: {}", item.getId(), e.getMessage());
                 }
-
-                // BM25 索引同步
-                try {
-                    bm25Service.index(item.getId(), userId, line, promptId);
-                } catch (Exception e) {
-                    log.warn("BM25 索引同步失败: id={}", item.getId(), e);
-                }
             }
         } catch (Exception e) {
             log.warn("记忆提取失败: userId={}, convId={}", userId, conversationId, e);
@@ -209,8 +199,6 @@ public class MemoryService {
                     item.setValue(item.getOriginalValue());
                     item.setDetailLevel(DetailLevel.FULL);
                     chromaService.updateMemory(userId, item.getChromaId(), item.getOriginalValue());
-                    // BM25 索引同步恢复后的全文
-                    bm25Service.index(item.getId(), userId, item.getOriginalValue(), item.getPromptId());
                 }
                 memoryRepo.save(item);
                 results.add(item);
@@ -314,8 +302,6 @@ public class MemoryService {
                 memoryRepo.save(item);
                 try { chromaService.updateMemory(item.getUserId(), item.getChromaId(), result); }
                 catch (Exception e) { log.warn("ChromaDB 异步压缩回写失败: id={}", item.getId(), e); }
-                try { bm25Service.index(item.getId(), item.getUserId(), result, item.getPromptId()); }
-                catch (Exception e) { log.warn("BM25 异步压缩回写失败: id={}", item.getId(), e); }
                 log.debug("LLM 异步压缩完成: id={}", item.getId());
             } catch (Exception e) {
                 log.warn("LLM 异步压缩失败: id={}", item.getId(), e);
@@ -440,7 +426,6 @@ public class MemoryService {
             if (!item.getUserId().equals(userId)) return; // 归属校验
             chromaService.deleteMemory(item.getUserId(), item.getChromaId());
             graphMemoryService.unlinkMemory(id);
-            bm25Service.remove(id);
             memoryRepo.delete(item);
         });
     }

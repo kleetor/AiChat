@@ -34,6 +34,9 @@
 10. [基础设施](#10-基础设施)
 11. [关键配置与常量](#11-关键配置与常量)
 12. [附录](#12-附录)
+13. [外部依赖清单](#13-外部依赖清单)
+14. [前后端接口契约](#14-前后端接口契约)
+15. [QPS 预测与资源需求](#15-qps-预测与资源需求)
 
 ---
 
@@ -75,7 +78,7 @@
 │  │                       Infrastructure Layer                              │   │
 │  │                                                                         │   │
 │  │ LLMService  │ ChromaDB  │ SiliconFlowEmbedding │ SiliconFlowRerank      │   │
-│  │ ImageService│ Bm25Index │ S3/MinIO FileStore   │ EmailService           │   │
+│  │ ImageService│ S3/MinIO FileStore              │ EmailService           │   │
 │  └────────────────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -769,9 +772,8 @@ SELECT * FROM prompts_hub WHERE MATCH(name, content, tags) AGAINST(:q IN BOOLEAN
     - 批量 embed ~32 条/批
     │
     ▼
-4. 双写
-    ├── ChromaDB (collection: kb_{kbId}_doc_{docId})
-    └── Lucene BM25 索引 (KbBm25IndexService)
+4. 写入
+    └── ChromaDB (collection: kb_{kbId}_doc_{docId})
 ```
 
 #### 限制
@@ -797,7 +799,6 @@ SELECT * FROM prompts_hub WHERE MATCH(name, content, tags) AGAINST(:q IN BOOLEAN
 │  GraphMemoryService   — 知识图谱 (实体+关系)              │
 │  MemoryChromaService  — ChromaDB 向量存储                 │
 │  EntityRetrievalService — 实体检索 (基于图谱)              │
-│  Bm25IndexService     — BM25 关键词索引                   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -960,14 +961,7 @@ rerank(query, candidates, topN)
 | 本地目录 | `./uploads/images`, `./uploads/kb`, `./uploads/avatars` | 开发环境回退 |
 | ChromaDB 数据 | `./chroma_data` | 向量持久化 |
 
-### 10.6 BM25 索引
-
-| 组件 | 文件 | 用途 |
-|------|------|------|
-| `Bm25IndexService` | 记忆关键词检索 | `searchByKeyword()` → `index()` → `deleteById()` |
-| `KbBm25IndexService` | 知识库文档检索 | 基于 Lucene 的 BM25 实现 |
-
-### 10.7 缓存策略
+### 10.6 缓存策略
 
 | 缓存名 | 类型 | TTL | 用途 |
 |--------|------|-----|------|
@@ -1038,6 +1032,479 @@ rerank(query, candidates, topN)
 | `analyze_image` | AnalyzeImageTool | `imageUrl`/`fileUrl` 非空 | `image_url` (string, required) |
 
 > 详见 [附录 C/E] 搜索双引擎竞速详解和识图工具详解。
+
+---
+
+## 13. 外部依赖清单
+
+### 13.1 运行时基础设施
+
+| 组件 | 版本 | 用途 | Docker 镜像 |
+|------|------|------|-------------|
+| Java | 17 | 运行时 | `eclipse-temurin:17-jre` (基于 Dockerfile) |
+| MySQL | 8.0 | 主数据库 | `mysql:8.0` |
+| ChromaDB | 0.6.3 | 向量存储 | `chromadb/chroma:0.6.3` |
+| Tesseract OCR | - | PDF OCR 回退 | 内置在 Docker 基础镜像中 |
+
+### 13.2 后端 Maven 依赖
+
+#### 核心框架
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| spring-boot-starter-parent | 4.0.6 | Spring Boot 父 POM |
+| spring-boot-starter-web | (继承) | REST API + 嵌入式 Tomcat |
+| spring-boot-starter-data-jpa | (继承) | JPA + Hibernate ORM |
+| spring-boot-starter-security | (继承) | 认证/授权框架 |
+| spring-boot-starter-cache | (继承) | Spring Cache 抽象 |
+| spring-boot-starter-mail | (继承) | SMTP 邮件发送 |
+| spring-boot-starter-validation | (继承) | Bean Validation |
+| spring-boot-starter-actuator | (继承) | 健康检查 / 指标监控 |
+| spring-boot-starter-thymeleaf | (继承) | 模板引擎（管理后台 SSR） |
+| spring-boot-devtools | (继承) | 开发热重载 |
+
+#### 安全
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| jjwt-api / jjwt-impl / jjwt-jackson | 0.12.6 | JWT 生成与解析 (HMAC-SHA256) |
+| spring-dotenv | 4.0.0 | .env 文件加载 |
+
+#### 数据库
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| mysql-connector-j | (继承) | MySQL JDBC 驱动 |
+| flyway-mysql | (继承) | 数据库迁移管理 |
+| spring-ai-bom | 2.0.0 | Spring AI 依赖管理 |
+| spring-ai-starter-model-openai | (继承) | OpenAI 兼容 API 客户端 |
+
+#### 缓存与工具
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| caffeine | (继承) | 本地高性能缓存 |
+| jackson-databind | (继承) | JSON 处理 |
+| httpclient5 | 5.4.1 | HTTP 客户端 |
+| lombok | (继承) | 代码生成 |
+
+#### 文档解析
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| poi-ooxml | 5.3.0 | Word/Excel/PPT 解析 |
+| jsoup | 1.18.1 | HTML 解析 |
+
+#### 云存储
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| aws-sdk-s3 | 2.28.0 | S3 兼容存储 |
+
+### 13.3 前端 NPM 依赖
+
+#### 核心框架
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| react | ^19.2.7 | UI 框架 |
+| react-dom | ^19.2.7 | DOM 渲染 |
+| react-router-dom | ^7.18.1 | SPA 路由 |
+
+#### UI 组件
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| radix-ui/react-avatar | ^1.2.0 | 头像组件 |
+| radix-ui/react-dropdown-menu | ^2.1.18 | 下拉菜单 |
+| radix-ui/react-popover | ^1.1.17 | 弹出框 |
+| radix-ui/react-scroll-area | ^1.2.12 | 自定义滚动条 |
+| radix-ui/react-select | ^2.3.1 | 选择器 |
+| radix-ui/react-separator | ^1.1.10 | 分隔线 |
+| radix-ui/react-slot | ^1.3.0 | 插槽 |
+| radix-ui/react-switch | ^1.3.1 | 开关 |
+| radix-ui/react-tooltip | ^1.2.10 | 提示框 |
+| lucide-react | ^1.21.0 | 图标库 |
+
+#### 样式/工具
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| tailwindcss | ^3.4.19 | CSS 工具类框架 |
+| class-variance-authority | ^0.7.1 | 组件变体管理 |
+| clsx | ^2.1.1 | className 合并 |
+| tailwind-merge | ^3.6.0 | Tailwind 类名合并去重 |
+| motion | ^12.42.0 | 动画库 |
+
+#### 构建工具
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| vite | ^8.1.0 | 构建工具 |
+| typescript | ~6.0.2 | 类型检查 |
+| @vitejs/plugin-react | ^6.0.2 | React Fast Refresh |
+| postcss | ^8.5.15 | CSS 后处理 |
+| autoprefixer | ^10.5.2 | CSS 浏览器前缀 |
+| oxlint | ^1.69.0 | Linter |
+
+### 13.4 外部 API 依赖
+
+| 服务 | API 端点 | 用途 | 认证方式 | 配置项 |
+|------|---------|------|---------|--------|
+| DeepSeek | `https://api.deepseek.com/v1/chat/completions` | 聊天 LLM | Bearer Token | `config.apiKey` |
+| SiliconFlow Embedding | `config.embeddingApiUrl` | 文本向量化 | Bearer Token | `SILICONFLOW_API_KEY` |
+| SiliconFlow Rerank | `config.rerankApiUrl` | Cross-Encoder 精排 | Bearer Token | `SILICONFLOW_API_KEY` |
+| SiliconFlow Vision | `config.imageApiUrl` | 视觉模型 (图片分析) | Bearer Token | `IMAGE_API_KEY` |
+| 千帆搜索 | `config.qianfanApiUrl` | 百度搜索 (千帆渠道) | Bearer Token | `QIANFAN_API_KEY` |
+| Tavily Search | `TAVILY_API_URL` | AI 搜索 | Bearer Token | `TAVILY_API_KEY` |
+| S3/MinIO | `config.s3UrlPrefix` | 对象存储 | AK/SK | `S3_ACCESS_KEY` / `S3_SECRET_KEY` |
+| SMTP | `config.mailHost` | 邮件发送 | 用户名/密码 | `MAIL_USERNAME` / `MAIL_PASSWORD` |
+| Tesseract OCR | 本地 `/usr/share/tessdata` | PDF OCR 回退 | 无 | 本机文件系统 |
+
+---
+
+## 14. 前后端接口契约
+
+### 14.1 通用约定
+
+| 项目 | 约定 |
+|------|------|
+| 基础路径 | `/api` |
+| 认证方式 | `Authorization: Bearer <JWT>` |
+| 内容类型 | `application/json`（文件除外） |
+| 时间格式 | ISO-8601 (`2026-07-26T10:30:00`) |
+| 分页参数 | `?page=0&size=20` (0-based) |
+| 排序参数 | `?sortBy=createdAt&order=desc` |
+| 流式响应 | `text/event-stream` (SSE) |
+
+### 14.2 认证与用户 API
+
+| 方法 | 路径 | 认证 | 说明 | 请求体 |
+|------|------|------|------|--------|
+| POST | `/api/auth/send-code` | - | 发送注册验证码 | `{email}` |
+| POST | `/api/auth/register` | - | 注册 | `{username, password, email, code}` |
+| POST | `/api/auth/login` | - | 登录 | `{username, password}` |
+| POST | `/api/auth/send-reset-code` | - | 发送重置验证码 | `{email}` |
+| POST | `/api/auth/reset-password` | - | 重置密码 | `{email, code, newPassword}` |
+| POST | `/api/auth/change-password` | JWT | 修改密码 | `{oldPassword, newPassword}` |
+| POST | `/api/auth/update-profile` | JWT | 更新签名 | `{signature}` |
+| POST | `/api/auth/upload-avatar` | JWT | 上传头像 | `multipart/form-data` |
+| GET | `/api/auth/profile/{id}` | JWT | 用户信息 | - |
+
+### 14.3 聊天 API
+
+| 方法 | 路径 | 认证 | 说明 | 请求体 |
+|------|------|------|------|--------|
+| POST | `/api/chat/{conversationId}/stream` | JWT | SSE 流式聊天 | `ChatRequest` |
+| GET | `/api/chat/{conversationId}/history` | JWT | 历史消息 | - |
+| POST | `/api/chat/conversations` | JWT | 创建对话 | `{name}` |
+| GET | `/api/chat/conversations` | JWT | 对话列表 | - |
+| DELETE | `/api/chat/conversations/{id}` | JWT | 删除对话 | - |
+
+**ChatRequest 结构**:
+```json
+{
+  "message": "string (required)",
+  "modelConfigId": "long (required)",
+  "promptId": "long (optional)",
+  "knowledgeBaseId": "long (optional)",
+  "webSearchEnabled": "boolean (optional)",
+  "longMemoryEnabled": "boolean (optional)",
+  "imageUrl": "string (optional)",
+  "imageDescription": "string (optional)",
+  "fileUrl": "string (optional)"
+}
+```
+
+### 14.4 提示词 API
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET | `/api/prompts` | JWT | 我的提示词列表 |
+| POST | `/api/prompts` | JWT | 创建提示词 |
+| PUT | `/api/prompts/{id}` | JWT | 更新提示词 |
+| DELETE | `/api/prompts/{id}` | JWT | 删除提示词 |
+
+### 14.5 提示词广场 API
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET | `/api/prompts-hub` | JWT | 广场列表 (热度递减) |
+| GET | `/api/prompts-hub/{id}` | JWT | 提示词详情 |
+| POST | `/api/prompts-hub` | JWT | 创建分享 |
+| GET | `/api/prompts-hub/search` | JWT | `?q=keyword` 全文搜索 |
+| POST | `/api/prompts-hub/{id}/like` | JWT | 切换点赞 |
+| POST | `/api/prompts-hub/{id}/dislike` | JWT | 点踩 |
+| POST | `/api/prompts-hub/{id}/favorite` | JWT | 切换收藏 |
+| POST | `/api/prompts-hub/{id}/rate` | JWT | 评分 `{score: 1-5}` |
+| POST | `/api/prompts-hub/{id}/copy` | JWT | 复制到我的提示词 |
+| POST | `/api/prompts-hub/upload` | JWT | 上传提示词 (含图片) |
+| POST | `/api/prompts-hub/upload-image` | JWT | 上传封面图 |
+| PUT | `/api/prompts-hub/{id}/image` | JWT | 更新封面图 |
+| GET | `/api/prompts-hub/{id}/comments` | JWT | 评论列表 |
+| POST | `/api/prompts-hub/{id}/comments` | JWT | 发表评论 |
+
+### 14.6 知识库 API
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| POST | `/api/kb/create` | JWT | 创建知识库 |
+| GET | `/api/kb/list` | JWT | 知识库列表 |
+| PUT | `/api/kb/{id}` | JWT | 编辑知识库 |
+| DELETE | `/api/kb/{id}` | JWT | 删除知识库 |
+| POST | `/api/kb/{kbId}/docs/upload` | JWT | 上传文档 |
+| GET | `/api/kb/{kbId}/docs` | JWT | 文档列表 |
+| DELETE | `/api/kb/docs/{docId}` | JWT | 删除文档 |
+| POST | `/api/kb/docs/{docId}/reindex` | JWT | 重新索引 |
+
+### 14.7 记忆 API
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET | `/api/memory/list` | JWT | 所有记忆 |
+| GET | `/api/memory/enabled` | JWT | 已启用记忆 |
+| POST | `/api/memory/add` | JWT | 手动添加 |
+| PUT | `/api/memory/{id}` | JWT | 编辑记忆 |
+| PUT | `/api/memory/{id}/toggle` | JWT | 启用/禁用 |
+| DELETE | `/api/memory/{id}` | JWT | 删除单条 |
+| DELETE | `/api/memory/clear` | JWT | 清空全部 |
+| POST | `/api/memory/search` | JWT | 搜索记忆 |
+| GET | `/api/memory/entities/merge-suggestions` | JWT | 实体消歧建议 |
+| POST | `/api/memory/entities/merge` | JWT | 执行实体合并 |
+
+### 14.8 计费 API
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET | `/api/billing/balance` | JWT | 余额查询 |
+| GET | `/api/billing/usage-records` | JWT | 消费记录 |
+| POST | `/api/billing/sponsor-create` | JWT | 赞助审核提交 |
+| POST | `/api/billing/sponsor-query` | JWT | 审核状态查询 |
+| POST | `/api/billing/checkin` | JWT | 每日签到 |
+| GET | `/api/billing/checkin-status` | JWT | 签到状态 |
+
+### 14.9 搜索 API
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| POST | `/api/search/web` | JWT | 千帆搜索 `{query, count}` |
+| GET | `/api/search/web` | JWT | `?query=&count=` |
+| POST | `/api/search/tavily` | JWT | Tavily 搜索 |
+| GET | `/api/search/tavily` | JWT | `?query=&maxResults=&searchDepth=` |
+
+### 14.10 好友 API
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET | `/api/friends/search` | JWT | `?q=keyword` |
+| POST | `/api/friends/request` | JWT | 发送好友请求 |
+| POST | `/api/friends/accept` | JWT | 接受请求 |
+| POST | `/api/friends/reject` | JWT | 拒绝请求 |
+| GET | `/api/friends/list` | JWT | 好友列表 |
+| GET | `/api/friends/pending` | JWT | 待处理请求 |
+| POST | `/api/friends/message` | JWT | 发送消息 |
+| GET | `/api/friends/chat/{friendUserId}` | JWT | 聊天记录 |
+| POST | `/api/friends/read/{senderId}` | JWT | 标记已读 |
+
+### 14.11 关注 API
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| POST | `/api/follows/{userId}` | JWT | 关注 |
+| DELETE | `/api/follows/{userId}` | JWT | 取消关注 |
+| GET | `/api/follows/{userId}/status` | JWT | 关注状态 |
+| GET | `/api/follows/following` | JWT | 我关注的 |
+| GET | `/api/follows/followers` | JWT | 关注我的 |
+| GET | `/api/follows/stats` | JWT | 统计 |
+
+### 14.12 通知 API
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET | `/api/notifications` | JWT | 通知列表 |
+| GET | `/api/notifications/unread-count` | JWT | 未读数 |
+| POST | `/api/notifications/read-all` | JWT | 全部已读 |
+| POST | `/api/notifications/{id}/read` | JWT | 单条已读 |
+| DELETE | `/api/notifications/{id}` | JWT | 删除通知 |
+
+### 14.13 模型配置 API
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET | `/api/model-configs` | JWT | 公开模型列表 (不含 API Key) |
+| GET | `/api/model-configs/{id}` | JWT | 模型详情 (不含 API Key) |
+
+### 14.14 管理后台 API (`/api/admin/**` — `ROLE_ADMIN`)
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/admin/login` | 管理员登录 |
+| POST | `/api/admin/logout` | 管理员登出 |
+| GET | `/api/admin/dashboard` | 仪表盘 |
+| GET | `/api/admin/dashboard/charts` | 图表 |
+| GET | `/api/admin/users` | 用户列表 |
+| GET | `/api/admin/users/{id}` | 用户详情 |
+| PUT | `/api/admin/users/{id}/balance` | 修改余额 |
+| PUT | `/api/admin/users/{id}/role` | 修改角色 |
+| PUT | `/api/admin/users/{id}/status` | 启/禁用 |
+| GET | `/api/admin/model-configs` | 模型配置列表 |
+| POST | `/api/admin/model-configs` | 新建模型配置 |
+| PUT | `/api/admin/model-configs/{id}` | 更新 |
+| DELETE | `/api/admin/model-configs/{id}` | 删除 |
+| GET | `/api/admin/sponsor-reviews` | 赞助审核列表 |
+| PUT | `/api/admin/sponsor-reviews/{id}/approve` | 通过 |
+| PUT | `/api/admin/sponsor-reviews/{id}/reject` | 拒绝 |
+| GET | `/api/admin/conversations` | 对话列表 |
+| GET | `/api/admin/conversations/{id}/messages` | 消息记录 |
+| GET | `/api/admin/usage-records` | 消费记录 |
+| GET | `/api/admin/revenue-stats` | 收入统计 |
+| GET | `/api/admin/prompts-hub` | 提示词管理 |
+| DELETE | `/api/admin/prompts-hub/{id}` | 删除提示词 |
+| PUT | `/api/admin/prompts-hub/{id}/feature` | 精选 |
+| GET | `/api/admin/prompts-hub/audit` | 审核队列 |
+| POST | `/api/admin/prompts-hub/{id}/approve` | 审核通过 |
+| POST | `/api/admin/prompts-hub/{id}/reject` | 审核拒绝 |
+| GET | `/api/admin/system-rules` | 系统规则列表 |
+| POST | `/api/admin/system-rules` | 新建规则 |
+| PUT | `/api/admin/system-rules/{id}` | 更新规则 |
+| DELETE | `/api/admin/system-rules/{id}` | 删除规则 |
+| POST | `/api/admin/system-rules/{id}/toggle` | 切换启用 |
+| PUT | `/api/admin/system-rules/sort` | 排序 |
+| GET | `/api/admin/audit-logs` | 审计日志 |
+| POST | `/api/admin/api-test` | API 健康检查 |
+
+### 14.15 文件上传 API
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| POST | `/api/image/upload` | JWT | 聊天图片上传 |
+| POST | `/api/file/upload` | JWT | 聊天文件上传 |
+
+### 14.16 端点数量统计
+
+| 分类 | 公开 | 需认证 (USER) | 管理员 (ADMIN) | 合计 |
+|------|------|--------------|---------------|------|
+| 认证 | 5 | 4 | - | 9 |
+| 聊天 | - | 5 | - | 5 |
+| 提示词 | - | 4 | - | 4 |
+| 提示词广场 | - | 14 | - | 14 |
+| 知识库 | - | 8 | - | 8 |
+| 记忆 | - | 10 | - | 10 |
+| 计费 | - | 6 | - | 6 |
+| 搜索 | - | 4 | - | 4 |
+| 好友 | - | 9 | - | 9 |
+| 关注 | - | 6 | - | 6 |
+| 通知 | - | 5 | - | 5 |
+| 模型配置 | - | 2 | - | 2 |
+| 文件上传 | - | 2 | - | 2 |
+| 管理后台 | 1 | - | 29 | 30 |
+| **合计** | **6** | **79** | **29** | **114** |
+
+---
+
+## 15. QPS 预测与资源需求
+
+### 15.1 业务模型假设
+
+| 场景 | 小型社区 | 中型社区 | 大型社区 |
+|------|---------|---------|---------|
+| DAU (日活用户) | 100 | 1,000 | 10,000 |
+| 并发用户 (峰值) | 10 | 100 | 500 |
+| 日聊天请求 | 500 | 5,000 | 50,000 |
+| 日均消息 | 2,500 | 25,000 | 250,000 |
+
+### 15.2 各接口 QPS 估算
+
+| 接口类别 | 小型 (QPS) | 中型 (QPS) | 大型 (QPS) | 瓶颈点 |
+|---------|-----------|-----------|-----------|--------|
+| **聊天 SSE** | 0.5-1 | 5-10 | 50-100 | LLM API 延迟 + Tomcat 线程 |
+| **聊天 (非流式)** | 0.2 | 2 | 20 | LLM API |
+| **提示词广场列表** | 1 | 5-10 | 50 | MySQL + Cache 命中 |
+| **提示词搜索** | 0.5 | 3 | 30 | MySQL FULLTEXT |
+| **知识库检索** | 0.5 | 3-5 | 30 | ChromaDB + Rerank |
+| **知识库上传** | 0.01 | 0.1 | 1 | 文档解析 + Embedding |
+| **记忆操作** | 0.5 | 3 | 20 | MySQL + ChromaDB |
+| **好友/关注** | 0.2 | 2 | 15 | MySQL |
+| **认证 (登录/注册)** | 0.1 | 1 | 5 | MySQL + JWT 生成 |
+| **管理后台** | 0.05 | 0.5 | 3 | MySQL 复杂查询 |
+| **总 QPS** | **~5** | **~35** | **~250** | - |
+
+### 15.3 资源需求
+
+#### 小型社区 (DAU 100, 总 QPS ~5)
+
+| 资源 | 规格 | 用途 |
+|------|------|------|
+| App 容器 | 1 核 / 512MB | Spring Boot + ChromaDB Launcher |
+| MySQL | 1 核 / 1GB | 主数据库 |
+| ChromaDB | 0.5 核 / 512MB | 向量存储 |
+| 带宽 | 10 Mbps | API 流量 + LLM 流式回传 |
+| 磁盘 | 20 GB | 数据库 + 向量 + 文件上传 |
+
+**预估月费 (国内云)**: ~150-300 元/月
+
+#### 中型社区 (DAU 1,000, 总 QPS ~35)
+
+| 资源 | 规格 | 用途 |
+|------|------|------|
+| App 容器 | 2 核 / 2GB x2 | 2 实例 + Nginx 负载均衡 |
+| MySQL | 2 核 / 4GB | 增加 buffer pool、慢查询日志 |
+| ChromaDB | 1 核 / 1GB | 增大 cache_size |
+| Redis | 1 核 / 512MB | Session / 分布式缓存 |
+| 带宽 | 30 Mbps | LLM SSE 流量占比高 |
+| 磁盘 | 50 GB SSD | 文件增多 |
+
+**预估月费**: ~800-1,500 元/月
+
+#### 大型社区 (DAU 10,000, 总 QPS ~250)
+
+| 资源 | 规格 | 用途 |
+|------|------|------|
+| App 容器 | 4 核 / 4GB x4 | K8s HPA 弹性伸缩 |
+| MySQL | 4 核 / 8GB (主从) | 读写分离 |
+| ChromaDB | 2 核 / 4GB x2 | 分布式向量库 |
+| Redis | 2 核 / 4GB (哨兵) | 高可用缓存 |
+| 消息队列 | RabbitMQ / Kafka | 知识库处理异步化 |
+| Nginx | 2 核 / 2GB | 反代 + SSL 终结 + 限速 |
+| 带宽 | 100 Mbps | 大量 SSE 长连接 |
+| 磁盘 | 200 GB SSD | 增量备份 |
+
+**预估月费**: ~5,000-10,000 元/月
+
+### 15.4 关键优化点
+
+| 优化项 | 当前状态 | 建议 |
+|--------|---------|------|
+| 连接池配置 | 默认 | 调整 HikariCP pool-size = CPU × 2 + 磁盘数 |
+| Tomcat 线程 | 默认 200 | 峰值的 1.5 倍 |
+| JPA 查询 | 多数使用 Spring Data | 监控 N+1 查询 |
+| 缓存命中 | Caffeine + Spring Cache | Redis 分布式缓存替代 Caffeine |
+| 数据库索引 | Flyway 管理 | 定期 explain 慢查询 |
+| SSE 连接数 | Tomcat 线程数限制 | 中型以上考虑 WebFlux |
+| ChromaDB | 单实例 | 大型时考虑集群部署 |
+| 日志级别 | 生产环境 INFO | 关闭 debug/trace |
+| JVM 参数 | 默认 | `-XX:+UseG1GC -Xms=heap/2 -Xmx=heap` |
+
+### 15.5 可扩展性分析
+
+```
+水平扩展瓶颈评估:
+
+  App Server: ✅ 无状态，直接横向扩展
+        └── 注意: ChromaDBLauncher 在 K8s 下应改为 sidecar 模式或独立部署
+
+  MySQL:     ⚠️ 读多可加从库，写仍有单点
+        └── 大型规模考虑分库 (user / chat / billing)
+
+  ChromaDB:  ⚠️ 当前单实例
+        └── ChromaDB 0.6.x 分布式能力有限，大型考虑 Milvus/Qdrant 替代
+
+  SSE 长连接: ⚠️ 每连接占用 1 线程
+        └── 当前使用 SseEmitter (WebFlux 可支持事件驱动)
+
+  搜索竞速:   ⚠️ 每次对话可能触发双引擎搜索
+        └── 搜索缓存 (TTL 5分钟) 可大幅降低重复搜索 API 消耗
+```
 
 ---
 

@@ -15,7 +15,7 @@ A multi-model AI chat platform built with Spring Boot 4 + React 19, featuring To
 | AI Chat | SSE streaming, multi-model switching, mid-response stop, context retention |
 | Tool Calling | AI autonomously invokes web search & image analysis via multi-round Tool Loop |
 | Prompt System | Custom System Prompts, community prompt hub with featured/likes |
-| RAG Knowledge Base | TXT/MD upload → auto chunking → vector+BM25 hybrid retrieval → Rerank ranking |
+| RAG Knowledge Base | TXT/MD upload → auto chunking → vector retrieval → Rerank ranking |
 | Long-term Memory | Human-like memory: four-tier decay, lazy decay, semantic recall, knowledge graph |
 | Friend System | PID search, friend requests/private chat, unread message badges |
 | Billing | Per-model token pricing, balance pre-deduction, sponsor top-up, daily check-in |
@@ -95,10 +95,10 @@ Entity disambiguation (LLM) → Manual merge → Temporal conflict detection
 
 #### Hybrid Retrieval
 
-On-demand memory recall uses three-path retrieval + RRF fusion + Cross-Encoder reranking:
+On-demand memory recall uses two-path retrieval + RRF fusion + Cross-Encoder reranking:
 
 ```
-User Query → ChromaDB vector + Lucene BM25 keyword + Knowledge Graph entities
+User Query → ChromaDB vector + Knowledge Graph entities
           → RRF (Reciprocal Rank Fusion)
           → Cross-Encoder Rerank
           → Top-K results
@@ -221,7 +221,6 @@ X-Frame-Options: DENY
 | Auth | Spring Security + JJWT 0.12.6 |
 | Cache | Caffeine |
 | Vector Database | ChromaDB |
-| Full-text Search | Lucene (BM25) + SmartChineseAnalyzer |
 | Embedding Model | SiliconFlow bge-large-zh-v1.5 (1024-dim) |
 | Rerank Model | BAAI/bge-reranker-v2-m3 (Cross-Encoder) |
 | HTTP Client | Apache HttpClient 5 |
@@ -322,15 +321,13 @@ aichat/
 │   │   ├── MessageContextBuilder.java   # Context assembly
 │   │   ├── MemoryService.java           # Long-term memory (4 modes)
 │   │   ├── GraphMemoryService.java      # Knowledge graph + entity disambiguation
-│   │   ├── HybridRetrievalService.java  # 3-path recall + RRF + Rerank
+│   │   ├── HybridRetrievalService.java  # 2-path recall + RRF + Rerank
 │   │   ├── ChromaDBService.java         # Vector DB operations
-│   │   ├── KbBm25IndexService.java      # KB Lucene BM25 index
-│   │   ├── Bm25IndexService.java        # Memory Lucene BM25 index
 │   │   ├── LLMService.java              # Low-level LLM calls
 │   │   ├── BillingService.java          # Optimistic-lock billing
 │   │   ├── AdminAuditLogService.java    # Async audit logging
 │   │   ├── KnowledgeBaseService.java    # KB core service
-│   │   ├── KbRetrievalService.java      # KB hybrid retrieval orchestrator
+│   │   ├── KbRetrievalService.java      # KB retrieval orchestrator
 │   │   ├── ChunkingService.java         # Recursive character split + injection filter
 │   │   ├── QueryRewriterService.java    # LLM query rewriting
 │   │   ├── parser/                      # Document parsers
@@ -400,7 +397,6 @@ flowchart TB
     subgraph DataLayer["Data Layer"]
         DB[(MySQL)]
         CDB[(ChromaDB)]
-        LUC[(Lucene BM25)]
         Cache[(Caffeine)]
     end
 
