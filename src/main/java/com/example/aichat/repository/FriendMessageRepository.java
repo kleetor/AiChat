@@ -30,4 +30,19 @@ public interface FriendMessageRepository extends JpaRepository<FriendMessage, Lo
            "(m.senderId = :u1 AND m.receiverId = :u2) OR (m.senderId = :u2 AND m.receiverId = :u1) " +
            "ORDER BY m.createdAt DESC")
     List<FriendMessage> findLatestMessage(@Param("u1") Long u1, @Param("u2") Long u2);
+
+    /** 获取用户与多个好友的最新一条消息（批量，避免 N+1） */
+    @Query(value = "SELECT m.* FROM friend_messages m " +
+           "INNER JOIN (SELECT " +
+           "  CASE WHEN sender_id = :userId THEN receiver_id ELSE sender_id END AS friend_id, " +
+           "  MAX(created_at) AS max_time " +
+           "  FROM friend_messages " +
+           "  WHERE (sender_id = :userId AND receiver_id IN :friendIds) " +
+           "     OR (receiver_id = :userId AND sender_id IN :friendIds) " +
+           "  GROUP BY friend_id) latest " +
+           "ON ((m.sender_id = :userId AND m.receiver_id = latest.friend_id) " +
+           " OR (m.receiver_id = :userId AND m.sender_id = latest.friend_id)) " +
+           "AND m.created_at = latest.max_time",
+           nativeQuery = true)
+    List<FriendMessage> findLatestMessagesBatch(@Param("userId") Long userId, @Param("friendIds") List<Long> friendIds);
 }

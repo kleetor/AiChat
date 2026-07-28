@@ -44,6 +44,11 @@ import java.util.concurrent.TimeUnit;
 public class ChatStreamService {
 
     private static final Logger logger = LoggerFactory.getLogger(ChatStreamService.class);
+
+    /** 客户端断开连接时抛出的异常，用于中止读取循环，阻止消息保存 */
+    static class ClientDisconnectedException extends RuntimeException {
+        ClientDisconnectedException() { super("客户端已断开"); }
+    }
     private static final double TOKEN_ESTIMATE_RATIO = 1.3;
     private static final int MAX_ROUNDS = 3;
     private static final long SSE_TIMEOUT_MS = 300_000L; // 5分钟，含工具执行+Phase2生成时间
@@ -243,9 +248,25 @@ public class ChatStreamService {
                     safeComplete(emitter);
                 }
             } catch (Exception e) {
-                logger.error("流式聊天异常", e);
-                safeSend(emitter, "error",
-                        "AI回复失败，请稍后重试", org.springframework.http.MediaType.TEXT_PLAIN);
+                // 客户端主动断开（中止生成）是正常行为，不记录完整堆栈
+                if (e instanceof ClientDisconnectedException
+                        || (e.getCause() instanceof ClientDisconnectedException)) {
+                    logger.info("客户端已断开连接（用户中止生成）");
+                } else if (e instanceof java.io.IOException
+                        && e.getMessage() != null
+                        && e.getMessage().contains("断开的管道")) {
+                    logger.info("客户端已断开连接（用户中止生成）");
+                } else if (e instanceof java.net.SocketTimeoutException
+                        || e.getCause() instanceof java.net.SocketTimeoutException) {
+                    logger.error("流式聊天超时", e);
+                    safeSend(emitter, "error", "AI 响应超时，请重试", org.springframework.http.MediaType.TEXT_PLAIN);
+                } else if (e instanceof java.io.IOException) {
+                    logger.error("流式聊天连接失败", e);
+                    safeSend(emitter, "error", "AI 服务连接失败，请稍后重试", org.springframework.http.MediaType.TEXT_PLAIN);
+                } else {
+                    logger.error("流式聊天异常", e);
+                    safeSend(emitter, "error", "AI 回复失败，请稍后重试", org.springframework.http.MediaType.TEXT_PLAIN);
+                }
                 safeComplete(emitter);
             }
         };
@@ -298,12 +319,12 @@ public class ChatStreamService {
                             String toSend = chunkBuf.toString();
                             chunkBuf.setLength(0);
                             sinceLastFlush = 0;
-                            emitter.send(SseEmitter.event()
-                                    .id(String.valueOf(eventCount.getAndIncrement()))
-                                    .data(toSend, org.springframework.http.MediaType.TEXT_PLAIN));
+                            sendContent(emitter, toSend, eventCount);
                         }
                     }
                 }
+            } catch (ClientDisconnectedException e) {
+                throw e; // 中止读取，阻止后续保存
             } catch (Exception e) {
                 logger.warn("解析流式响应失败", e);
             }
@@ -311,9 +332,7 @@ public class ChatStreamService {
 
         if (chunkBuf.length() > 0) {
             try {
-                emitter.send(SseEmitter.event()
-                        .id(String.valueOf(eventCount.getAndIncrement()))
-                        .data(chunkBuf.toString(), org.springframework.http.MediaType.TEXT_PLAIN));
+                sendContent(emitter, chunkBuf.toString(), eventCount);
             } catch (Exception e) {
                 logger.warn("发送剩余数据失败", e);
             }
@@ -399,9 +418,7 @@ public class ChatStreamService {
 
                 if ("tool_calls".equals(finishReason)) {
                     if (chunkBuf.length() > 0 && !hasToolCalls) {
-                        emitter.send(SseEmitter.event()
-                                .id(String.valueOf(eventCount.getAndIncrement()))
-                                .data(chunkBuf.toString(), org.springframework.http.MediaType.TEXT_PLAIN));
+                        sendContent(emitter, chunkBuf.toString(), eventCount);
                         chunkBuf.setLength(0);
                         sinceLastFlush = 0;
                     }
@@ -433,6 +450,8 @@ public class ChatStreamService {
                     return promptTokens;
                 }
 
+            } catch (ClientDisconnectedException e) {
+                throw e; // 中止读取，阻止后续保存
             } catch (Exception e) {
                 logger.warn("解析流式响应失败", e);
             }
@@ -441,9 +460,7 @@ public class ChatStreamService {
         // 无 tool_calls：flush 剩余
         if (chunkBuf.length() > 0) {
             try {
-                emitter.send(SseEmitter.event()
-                        .id(String.valueOf(eventCount.getAndIncrement()))
-                        .data(chunkBuf.toString(), org.springframework.http.MediaType.TEXT_PLAIN));
+                sendContent(emitter, chunkBuf.toString(), eventCount);
             } catch (Exception e) {
                 logger.warn("发送剩余数据失败", e);
             }
@@ -551,6 +568,8 @@ public class ChatStreamService {
                     parseContentStream(reader, emitter, fullResponse, chunkBuf, eventCount);
                 }
             }
+        } catch (ClientDisconnectedException e) {
+            logger.debug("Phase 2 客户端已断开");
         } catch (Exception e) {
             logger.error("Phase 2 请求失败", e);
             safeSend(emitter, "error",
@@ -625,6 +644,24 @@ public class ChatStreamService {
             emitter.complete();
         } catch (IllegalStateException e) {
             logger.debug("emitter 已关闭，跳过 complete");
+        }
+    }
+
+    /**
+     * 发送 SSE content 事件，包装为前端期望的 JSON 格式：{"content":"..."}
+     * 客户端断开时静默忽略，不产生警告日志。
+     */
+    private void sendContent(SseEmitter emitter, String text, AtomicInteger eventCount) {
+        try {
+            String json = "{\"content\":" + objectMapper.writeValueAsString(text) + "}";
+            emitter.send(SseEmitter.event()
+                    .id(String.valueOf(eventCount.getAndIncrement()))
+                    .data(json, org.springframework.http.MediaType.APPLICATION_JSON));
+        } catch (IllegalStateException e) {
+            logger.debug("SSE content 发送失败（客户端已断开）");
+            throw new ClientDisconnectedException();
+        } catch (Exception e) {
+            logger.warn("发送 SSE content 失败", e);
         }
     }
 

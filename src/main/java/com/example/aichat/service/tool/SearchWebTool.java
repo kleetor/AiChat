@@ -6,10 +6,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -31,6 +35,12 @@ public class SearchWebTool implements ToolHandler {
     private final TavilySearchService tavily;
     private final SearchService qianfan;
     private final ObjectMapper objectMapper;
+
+    /** 搜索缓存：相同查询 5 分钟内不重复调用外部 API，节省配额 */
+    private final Cache<String, String> searchCache = Caffeine.newBuilder()
+            .expireAfterWrite(5, TimeUnit.MINUTES)
+            .maximumSize(200)
+            .build();
 
     public SearchWebTool(TavilySearchService tavily, SearchService qianfan,
                           ObjectMapper objectMapper) {
@@ -94,8 +104,18 @@ public class SearchWebTool implements ToolHandler {
 
         logger.info("search_web query={}", query);
 
+        // 检查缓存，命中则直接返回
+        String cacheKey = sha256(query);
+        String cached = searchCache.getIfPresent(cacheKey);
+        if (cached != null) {
+            logger.info("搜索缓存命中: query={}", query);
+            return new ToolResult(call.getId(), name(), cached);
+        }
+
         // 双引擎降级
         String md = searchWithFallback(query);
+        // 存入缓存
+        searchCache.put(cacheKey, md);
         return new ToolResult(call.getId(), name(), md);
     }
 
@@ -163,5 +183,17 @@ public class SearchWebTool implements ToolHandler {
     private String truncate(String text, int maxLen) {
         if (text.length() <= maxLen) return text;
         return text.substring(0, maxLen) + "\n\n（搜索结果过长，已截断）";
+    }
+
+    private String sha256(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte b : hash) hex.append(String.format("%02x", b));
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

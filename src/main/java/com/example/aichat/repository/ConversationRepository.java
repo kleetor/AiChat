@@ -4,6 +4,7 @@ import com.example.aichat.model.Conversation;
 import com.example.aichat.model.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,8 +20,13 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
     @Query("SELECT c FROM Conversation c WHERE c.user.id = :userId ORDER BY c.createdAt DESC")
     List<Conversation> findByUserIdOrderByCreatedAtDesc(@Param("userId") Long userId);
 
+    @EntityGraph(attributePaths = {"user"})
     @Query("SELECT c FROM Conversation c WHERE c.user.id = :userId ORDER BY c.createdAt DESC")
     Page<Conversation> findByUserIdOrderByCreatedAtDesc(@Param("userId") Long userId, Pageable pageable);
+
+    @Override
+    @EntityGraph(attributePaths = {"user"})
+    Page<Conversation> findAll(Pageable pageable);
 
     @Query("SELECT COUNT(c) FROM Conversation c WHERE c.user.id = :userId")
     long countByUserId(@Param("userId") Long userId);

@@ -129,13 +129,41 @@ public class FriendService {
         friendshipRepository.save(fs);
     }
 
-    /** 获取好友列表（含用户信息） */
+    /** 获取好友列表（含用户信息） — 批量加载，避免 N+1 */
     public List<Map<String, Object>> getFriendList(Long userId) {
         List<Friendship> list = friendshipRepository.findAcceptedByUserId(userId);
-        List<Map<String, Object>> result = new ArrayList<>();
+        if (list.isEmpty()) return List.of();
+
+        // 收集所有好友 ID
+        List<Long> friendIds = new ArrayList<>();
+        Map<Long, Long> friendshipToFriend = new HashMap<>(); // friendshipId → friendId
         for (Friendship fs : list) {
             Long friendId = fs.getUserId().equals(userId) ? fs.getFriendId() : fs.getUserId();
-            User friend = userRepository.findById(friendId).orElse(null);
+            friendIds.add(friendId);
+            friendshipToFriend.put(fs.getId(), friendId);
+        }
+
+        // 批量加载用户（1 次查询替换 N 次）
+        Map<Long, User> userMap = new HashMap<>();
+        userRepository.findAllById(friendIds).forEach(u -> userMap.put(u.getId(), u));
+
+        // 批量加载最新消息（1 次查询替换 N 次）
+        List<FriendMessage> latestMessages = friendMessageRepository.findLatestMessagesBatch(userId, friendIds);
+        Map<Long, String> latestMsgMap = new HashMap<>();
+        for (FriendMessage lm : latestMessages) {
+            Long friendId = lm.getSenderId().equals(userId) ? lm.getReceiverId() : lm.getSenderId();
+            String content = lm.getContent();
+            if (content.length() > 30) content = content.substring(0, 30) + "...";
+            latestMsgMap.put(friendId, content);
+        }
+
+        // 未读消息数（1 次查询，不在循环内）
+        long unread = friendMessageRepository.countUnread(userId);
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Friendship fs : list) {
+            Long friendId = friendshipToFriend.get(fs.getId());
+            User friend = userMap.get(friendId);
             if (friend == null) continue;
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("friendshipId", fs.getId());
@@ -144,30 +172,26 @@ public class FriendService {
             m.put("pid", friend.getPid());
             m.put("avatarUrl", friend.getAvatarUrl() != null ? friend.getAvatarUrl() : "");
             m.put("signature", friend.getSignature() != null ? friend.getSignature() : "");
-            // 未读消息数
-            long unread = friendMessageRepository.countUnread(userId);
             m.put("unread", unread);
-            // 最新一条消息
-            List<FriendMessage> latest = friendMessageRepository.findLatestMessage(userId, friendId);
-            if (!latest.isEmpty()) {
-                FriendMessage lm = latest.get(0);
-                String content = lm.getContent();
-                if (content.length() > 30) content = content.substring(0, 30) + "...";
-                m.put("lastMessage", content);
-            } else {
-                m.put("lastMessage", "");
-            }
+            m.put("lastMessage", latestMsgMap.getOrDefault(friendId, ""));
             result.add(m);
         }
         return result;
     }
 
-    /** 获取待处理的好友申请 */
+    /** 获取待处理的好友申请 — 批量加载，避免 N+1 */
     public List<Map<String, Object>> getPendingRequests(Long userId) {
         List<Friendship> list = friendshipRepository.findPendingRequests(userId);
+        if (list.isEmpty()) return List.of();
+
+        // 批量加载申请人用户
+        List<Long> fromUserIds = list.stream().map(Friendship::getUserId).distinct().toList();
+        Map<Long, User> userMap = new HashMap<>();
+        userRepository.findAllById(fromUserIds).forEach(u -> userMap.put(u.getId(), u));
+
         List<Map<String, Object>> result = new ArrayList<>();
         for (Friendship fs : list) {
-            User fromUser = userRepository.findById(fs.getUserId()).orElse(null);
+            User fromUser = userMap.get(fs.getUserId());
             if (fromUser == null) continue;
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("friendshipId", fs.getId());

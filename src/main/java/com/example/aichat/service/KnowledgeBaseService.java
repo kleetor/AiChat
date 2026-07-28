@@ -8,10 +8,11 @@ import com.example.aichat.repository.KnowledgeBaseRepository;
 import com.example.aichat.service.parser.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,7 +20,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -37,6 +37,7 @@ public class KnowledgeBaseService {
     private final List<DocumentParser> parsers;
     private final TransactionTemplate transactionTemplate;
     private final CacheManager cacheManager;
+    private final ThreadPoolTaskExecutor processExecutor;
 
     private static final Path UPLOAD_DIR = Paths.get("./uploads/kb");
     private static final long MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
@@ -48,12 +49,6 @@ public class KnowledgeBaseService {
     /** 单用户最大存储占用（500MB） */
     private static final long MAX_STORAGE_PER_USER = 500L * 1024 * 1024;
 
-    /** 异步文档处理线程池（有界队列，防止任务积压耗尽内存） */
-    private final ExecutorService processExecutor = new ThreadPoolExecutor(
-            2, 4, 60L, TimeUnit.SECONDS,
-            new LinkedBlockingQueue<>(20),
-            new ThreadPoolExecutor.CallerRunsPolicy());
-
 
     public KnowledgeBaseService(KnowledgeBaseRepository kbRepo,
                                  KbDocumentRepository docRepo,
@@ -61,7 +56,8 @@ public class KnowledgeBaseService {
                                  ChunkingService chunkingService,
                                  List<DocumentParser> parsers,
                                  PlatformTransactionManager transactionManager,
-                                 CacheManager cacheManager) {
+                                 CacheManager cacheManager,
+                                 @Qualifier("kbProcessExecutor") ThreadPoolTaskExecutor processExecutor) {
         this.kbRepo = kbRepo;
         this.docRepo = docRepo;
         this.chromaDBService = chromaDBService;
@@ -69,6 +65,7 @@ public class KnowledgeBaseService {
         this.parsers = parsers;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.cacheManager = cacheManager;
+        this.processExecutor = processExecutor;
         try { Files.createDirectories(UPLOAD_DIR); } catch (IOException ignored) {}
     }
 
@@ -140,10 +137,7 @@ public class KnowledgeBaseService {
 
     /** 删除知识库 */
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(value = "kbList", key = "#userId"),
-        @CacheEvict(value = "kbDocs", allEntries = true)
-    })
+    @CacheEvict(value = "kbList", key = "#userId")
     public void delete(Long kbId, Long userId) {
         KnowledgeBase kb = kbRepo.findById(kbId)
                 .orElseThrow(() -> BusinessException.notFound("知识库不存在"));
@@ -155,10 +149,7 @@ public class KnowledgeBaseService {
     }
 
     /** 上传文档 */
-    @Caching(evict = {
-        @CacheEvict(value = "kbList", key = "#userId", beforeInvocation = true),
-        @CacheEvict(value = "kbDocs", key = "#userId + '_' + #kbId", beforeInvocation = true)
-    })
+    @CacheEvict(value = "kbList", key = "#userId", beforeInvocation = true)
     public KbDocument uploadDocument(Long kbId, Long userId, MultipartFile file) throws IOException {
         KnowledgeBase kb = kbRepo.findById(kbId)
                 .orElseThrow(() -> BusinessException.notFound("知识库不存在"));
@@ -196,8 +187,7 @@ public class KnowledgeBaseService {
         return doc;
     }
 
-    /** 文档列表 */
-    @Cacheable(value = "kbDocs", key = "#userId + '_' + #kbId")
+    /** 文档列表（不缓存，确保上传后状态实时可见） */
     public List<KbDocument> listDocuments(Long kbId, Long userId) {
         KnowledgeBase kb = kbRepo.findById(kbId)
                 .orElseThrow(() -> BusinessException.notFound("知识库不存在"));
@@ -211,10 +201,7 @@ public class KnowledgeBaseService {
 
     /** 删除文档 */
     @Transactional
-    @Caching(evict = {
-        @CacheEvict(value = "kbList", key = "#userId"),
-        @CacheEvict(value = "kbDocs", allEntries = true)
-    })
+    @CacheEvict(value = "kbList", key = "#userId")
     public void deleteDocument(Long docId, Long userId) {
         KbDocument doc = docRepo.findById(docId)
                 .orElseThrow(() -> BusinessException.notFound("文档不存在"));
@@ -232,10 +219,7 @@ public class KnowledgeBaseService {
     }
 
     /** 重新索引文档 */
-    @Caching(evict = {
-        @CacheEvict(value = "kbList", key = "#userId", beforeInvocation = true),
-        @CacheEvict(value = "kbDocs", allEntries = true, beforeInvocation = true)
-    })
+    @CacheEvict(value = "kbList", key = "#userId", beforeInvocation = true)
     public void reindex(Long docId, Long userId) {
         transactionTemplate.executeWithoutResult(status -> {
             KbDocument doc = docRepo.findById(docId)
@@ -344,18 +328,11 @@ public class KnowledgeBaseService {
         }
     }
 
-    /** 异步任务中手动清除 kbList 和 kbDocs 缓存 */
+    /** 异步任务中手动清除 kbList 缓存 */
     private void evictKbCache(Long kbId) {
         if (cacheManager == null) {
             log.warn("[缓存] cacheManager 为 null，无法清除缓存: kbId={}", kbId);
             return;
-        }
-        var docsCache = cacheManager.getCache("kbDocs");
-        if (docsCache != null) {
-            docsCache.clear();
-            log.info("[缓存] kbDocs 缓存已清除: kbId={}", kbId);
-        } else {
-            log.warn("[缓存] kbDocs 缓存不存在: kbId={}", kbId);
         }
         var listCache = cacheManager.getCache("kbList");
         if (listCache != null) {
