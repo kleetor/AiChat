@@ -173,16 +173,26 @@ export default function App() {
     img.clearImageUpload();
     file.clearFileUpload();
 
+    // 立即清空输入框，回复生成期间显示灰色不可编辑
+    setInputValue("");
+
     await chat.handleSend(
       req,
       conv.activeConvId,
       conv.setActiveConvId,
       setMessages,
-      (_) => {}, // auto-created conv handled internally
+      (_) => {},
       inputValue.trim(),
     );
 
-    setInputValue("");
+    // 流结束后重载历史，用数据库 ID 替换本地临时 ID，确保删除功能正常
+    if (conv.activeConvId) {
+      try {
+        const history = await getChatHistory(conv.activeConvId);
+        if (history.messages) setMessages(history.messages);
+      } catch { /* ignore */ }
+    }
+
     conv.loadConversations(); // refresh titles
   }, [inputValue, isLoggedIn, selectedModelId, activePrompt, webSearchEnabled, selectedKBId, chat, conv, img, file]);
 
@@ -270,7 +280,7 @@ export default function App() {
           <ChatMessages messages={messages} isGenerating={chat.isGenerating} onDeleteMessage={async (id: number) => {
             try {
               await deleteChatMsg(id);
-              setMessages(prev => prev.filter(m => m.id !== id));
+              setMessages(prev => prev.filter(m => Math.abs(m.id) !== Math.abs(id)));
             } catch (e) {
               console.warn("删除消息失败:", e);
             }
@@ -288,7 +298,7 @@ export default function App() {
           onSend={handleSend}
           onStop={chat.handleStop}
           isGenerating={chat.isGenerating}
-          disabled={!isLoggedIn}
+          disabled={!isLoggedIn || chat.isGenerating}
           onImageUpload={isLoggedIn ? (f) => img.handleImageUpload(f, uploadImage) : undefined}
           onClearImage={img.clearImageUpload}
           imageUploading={img.imageUploading}
