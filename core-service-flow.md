@@ -1,8 +1,8 @@
 # AI Chat 核心服务流文档
 
-> **最后更新**: 2026-07-26  
+> **最后更新**: 2026-07-28  
 > **覆盖范围**: 安全体系、认证用户、计费、核心聊天流、上下文注入、工具系统、管理后台、功能组件、基础设施  
-> **核心文件**: 60+ Java 文件 + 10+ 前端文件
+> **核心文件**: 130+ Java 文件 + 50+ 前端文件
 
 ---
 
@@ -315,7 +315,7 @@ RateLimitInterceptor (HandlerInterceptor)
     └── 无匹配规则 → 放行
 ```
 
-#### 所有速率限制规则 (24 条)
+#### 所有速率限制规则 (21 条)
 
 | 规则 ID | 端点 | 限制 | 窗口 |
 |---------|------|------|------|
@@ -497,7 +497,7 @@ mailSender.send(SimpleMailMessage)  → 异步发送
     ├── 实际扣除: user.balance -= actualCost
     ├── 记录用量: token_usages 表 (inputTokens, outputTokens, costAmount, modelConfigId)
     ├── 更新用户统计: totalTokens++, 更新 lastActiveAt, 更新 monthlyTokens
-    ├── 悲观锁: @Lock(PESSIMISTIC_WRITE) → userRepository.findByIdWithLock()
+    ├── 乐观锁: @Version + 3 次重试 (OptimisticLockException)
     └── 缓存失效: @CacheEvict("billingBalance")
 
 阶段 3: 释放预留 (releaseReservedBalance)
@@ -529,11 +529,13 @@ mailSender.send(SimpleMailMessage)  → 异步发送
 
 | 端点 | 说明 |
 |------|------|
-| `POST /api/billing/create-order` | 创建充值订单 |
-| `POST /api/billing/sponsor-submit` | 赞助审核提交 |
-| `POST /api/billing/sponsor-query` | 查询审核结果 |
-| `GET /api/billing/balance` | 查询余额 (含缓存) |
-| `GET /api/billing/usage` | 消费记录 |
+| `POST /api/billing/sponsor-upload` | 上传赞助截图（仅图片） |
+| `POST /api/billing/sponsor-create` | 上传赞助截图 + 金额，统一创建审核订单 |
+| `POST /api/billing/checkin` | 每日签到领取免费 Token |
+| `GET /api/billing/checkin-status` | 查询今日签到状态 |
+| `GET /api/billing/balance` | 查询余额（含缓存） |
+| `GET /api/billing/usage-records` | 消费记录（分页） |
+| `POST /api/billing/recharge` | 已废弃（返回 410 Gone） |
 
 ---
 
@@ -752,15 +754,8 @@ SELECT * FROM prompts_hub WHERE MATCH(name, content, tags) AGAINST(:q IN BOOLEAN
 上传文档 (MultipartFile)
     │
     ▼
-1. 文档解析器选择 (DocumentParser 接口，8 种格式)
-    ├── TextParser        — .txt
-    ├── MarkdownParser    — .md
-    ├── PdfParser         — .pdf (支持 OCR 回退 → Tesseract)
-    ├── WordParser        — .docx
-    ├── ExcelParser       — .xlsx
-    ├── PptParser         — .pptx
-    ├── HtmlParser        — .html
-    └── CsvParser         — .csv
+1. 文档解析器选择 (DocumentParser 接口)
+    ├── TxtParser         — .txt / .md (目前唯一实现，处理纯文本和 Markdown)
     │
     ▼
 2. 分块 (ChunkingService)
@@ -993,10 +988,10 @@ rerank(query, candidates, topN)
 
 | 常量 | 位置 | 值 |
 |------|------|-----|
-| SSE 超时 | ChatStreamService | 120s |
+| SSE 超时 | ChatStreamService | 300s (5 分钟) |
 | 最大历史轮数 | MessageContextBuilder | 30 |
-| 工具调用最大轮次 | ChatStreamService | 2 |
-| 工具执行超时 | ChatStreamService | 30s |
+| 工具调用最大轮次 | ChatStreamService | 3 |
+| 工具执行超时 | ChatStreamService | 60s |
 | Token 估算系数 | ChatStreamService / LLMService | 1.3 |
 | 每个用户最大对话数 | ConversationService | 10 |
 | 计费安全系数 | BillingService | 2.0 |
@@ -1044,7 +1039,7 @@ rerank(query, candidates, topN)
 | Java | 17 | 运行时 | `eclipse-temurin:17-jre` (基于 Dockerfile) |
 | MySQL | 8.0 | 主数据库 | `mysql:8.0` |
 | ChromaDB | 0.6.3 | 向量存储 | `chromadb/chroma:0.6.3` |
-| Tesseract OCR | - | PDF OCR 回退 | 内置在 Docker 基础镜像中 |
+| Tesseract OCR | - | PDF OCR 回退 | 内置在 Docker 基础镜像中（计划中） |
 
 ### 13.2 后端 Maven 依赖
 
@@ -1159,7 +1154,6 @@ rerank(query, candidates, topN)
 | Tavily Search | `TAVILY_API_URL` | AI 搜索 | Bearer Token | `TAVILY_API_KEY` |
 | S3/MinIO | `config.s3UrlPrefix` | 对象存储 | AK/SK | `S3_ACCESS_KEY` / `S3_SECRET_KEY` |
 | SMTP | `config.mailHost` | 邮件发送 | 用户名/密码 | `MAIL_USERNAME` / `MAIL_PASSWORD` |
-| Tesseract OCR | 本地 `/usr/share/tessdata` | PDF OCR 回退 | 无 | 本机文件系统 |
 
 ---
 
@@ -1195,11 +1189,13 @@ rerank(query, candidates, topN)
 
 | 方法 | 路径 | 认证 | 说明 | 请求体 |
 |------|------|------|------|--------|
+| POST | `/api/chat/{conversationId}` | JWT | 同步聊天（一次性返回回复） | `ChatRequest` |
 | POST | `/api/chat/{conversationId}/stream` | JWT | SSE 流式聊天 | `ChatRequest` |
 | GET | `/api/chat/{conversationId}/history` | JWT | 历史消息 | - |
-| POST | `/api/chat/conversations` | JWT | 创建对话 | `{name}` |
-| GET | `/api/chat/conversations` | JWT | 对话列表 | - |
-| DELETE | `/api/chat/conversations/{id}` | JWT | 删除对话 | - |
+| POST | `/api/conversations` | JWT | 创建对话 | `{name}` |
+| GET | `/api/conversations` | JWT | 对话列表 | - |
+| DELETE | `/api/conversations/{id}` | JWT | 删除对话 | - |
+| DELETE | `/api/chat/messages/{id}` | JWT | 删除单条消息 | - |
 
 **ChatRequest 结构**:
 ```json
@@ -1276,12 +1272,13 @@ rerank(query, candidates, topN)
 
 | 方法 | 路径 | 认证 | 说明 |
 |------|------|------|------|
-| GET | `/api/billing/balance` | JWT | 余额查询 |
-| GET | `/api/billing/usage-records` | JWT | 消费记录 |
-| POST | `/api/billing/sponsor-create` | JWT | 赞助审核提交 |
-| POST | `/api/billing/sponsor-query` | JWT | 审核状态查询 |
-| POST | `/api/billing/checkin` | JWT | 每日签到 |
-| GET | `/api/billing/checkin-status` | JWT | 签到状态 |
+| GET | `/api/billing/balance` | JWT | 余额查询（含累计消费和 Token 用量） |
+| GET | `/api/billing/usage-records` | JWT | 消费记录（分页，每页 20 条） |
+| POST | `/api/billing/sponsor-upload` | JWT | 上传赞助截图（仅图片，不创建订单） |
+| POST | `/api/billing/sponsor-create` | JWT | 上传赞助截图 + 金额，创建审核订单 |
+| POST | `/api/billing/checkin` | JWT | 每日签到领取 Token |
+| GET | `/api/billing/checkin-status` | JWT | 查询今日签到状态 |
+| POST | `/api/billing/recharge` | JWT | 已废弃（返回 410 Gone） |
 
 ### 14.9 搜索 API
 
@@ -1385,12 +1382,12 @@ rerank(query, candidates, topN)
 | 分类 | 公开 | 需认证 (USER) | 管理员 (ADMIN) | 合计 |
 |------|------|--------------|---------------|------|
 | 认证 | 5 | 4 | - | 9 |
-| 聊天 | - | 5 | - | 5 |
+| 聊天 | - | 7 | - | 7 |
 | 提示词 | - | 4 | - | 4 |
 | 提示词广场 | - | 14 | - | 14 |
 | 知识库 | - | 8 | - | 8 |
 | 记忆 | - | 10 | - | 10 |
-| 计费 | - | 6 | - | 6 |
+| 计费 | - | 7 | - | 7 |
 | 搜索 | - | 4 | - | 4 |
 | 好友 | - | 9 | - | 9 |
 | 关注 | - | 6 | - | 6 |
@@ -1398,7 +1395,7 @@ rerank(query, candidates, topN)
 | 模型配置 | - | 2 | - | 2 |
 | 文件上传 | - | 2 | - | 2 |
 | 管理后台 | 1 | - | 29 | 30 |
-| **合计** | **6** | **79** | **29** | **114** |
+| **合计** | **6** | **82** | **29** | **117** |
 
 ---
 
@@ -1508,4 +1505,4 @@ rerank(query, candidates, topN)
 
 ---
 
-*本文档基于源码自动生成，覆盖全部 60+ Java 文件的核心逻辑，最后更新 2026-07-26。*
+*本文档基于源码自动生成，覆盖全部 130+ Java 文件的核心逻辑，最后更新 2026-07-28。*

@@ -163,14 +163,14 @@ System Rules → Custom Prompt → Long-term Memory → Conversation Summary
 
 | Protection | Implementation |
 |------------|---------------|
-| API Key Encryption | AES-256-GCM encrypted storage for all model API Keys, with plaintext migration support |
+| API Key Encryption | AES-128-GCM encrypted storage for all model API Keys, with plaintext migration support |
 | Secret Management | All sensitive config via environment variables; `.env` is `.gitignore`d |
 | SSRF Protection | `NetworkUtils.validateExternalUrl` blocks internal/loopback/reserved address access |
 | Image Upload | Whitelist extension validation (png/jpg/jpeg/gif/webp), rejects non-image files |
 
 ### Rate Limiting
 
-17 fine-grained rate-limit rules covering all sensitive endpoints:
+21 fine-grained rate-limit rules covering all sensitive endpoints:
 
 | Endpoint | Limit |
 |----------|-------|
@@ -187,7 +187,7 @@ System Rules → Custom Prompt → Long-term Memory → Conversation Summary
 ### HTTP Security Headers
 
 ```http
-Content-Security-Policy: default-src 'self'; frame-ancestors 'none'
+Content-Security-Policy: default-src 'self'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https:; frame-ancestors 'none'
 Strict-Transport-Security: max-age=31536000; includeSubDomains
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
@@ -206,6 +206,8 @@ X-Frame-Options: DENY
 |------------|---------------|
 | Balance Pre-deduction | Estimate tokens before call and reserve balance; release on failure |
 | Optimistic Lock Billing | `@Version` + 3 retries to prevent concurrent double-charging |
+| Sponsor Review | User uploads proof → admin reviews and grants tokens |
+| Daily Check-in | Free tokens awarded for daily check-in |
 | Estimation Fallback | When API returns no usage, estimate from character count to ensure nothing is missed |
 
 ---
@@ -309,7 +311,7 @@ aichat/
 │   ├── config/
 │   │   ├── SecurityConfig.java          # Spring Security + HTTP security headers
 │   │   ├── JwtAuthenticationFilter.java # JWT filter
-│   │   ├── RateLimitInterceptor.java    # 17 rate-limit rules
+│   │   ├── RateLimitInterceptor.java    # 21 rate-limit rules
 │   │   ├── WebConfig.java              # CORS + static resources
 │   │   ├── GlobalExceptionHandler.java  # Global exception handler
 │   │   └── props/                       # Type-safe config properties
@@ -337,10 +339,10 @@ aichat/
 │   │       ├── ToolHandler.java         # Tool interface
 │   │       ├── SearchWebTool.java       # Dual-engine web search
 │   │       └── AnalyzeImageTool.java    # Image analysis
-│   ├── model/                           # JPA entities (21)
-│   ├── repository/                      # Spring Data JPA (24)
+│   ├── model/                           # JPA entities (27)
+│   ├── repository/                      # Spring Data JPA (27)
 │   └── util/
-│       ├── AESUtil.java                 # AES-256-GCM encryption
+│       ├── AESUtil.java                 # AES-128-GCM encryption
 │       ├── JwtUtil.java                 # JWT signing/verification
 │       └── NetworkUtils.java            # SSRF protection
 ├── src/main/resources/

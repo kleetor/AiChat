@@ -163,14 +163,14 @@ System Rules → Custom Prompt → Long-term Memory → Conversation Summary
 
 | 防护 | 实现 |
 |------|------|
-| API Key 加密 | AES-256-GCM 加密存储所有模型 API Key，支持明文数据迁移 |
+| API Key 加密 | AES-128-GCM 加密存储所有模型 API Key，支持明文数据迁移 |
 | 密钥管理 | 所有敏感配置通过环境变量注入，`.env` 文件已 `.gitignore` |
 | SSRF 防护 | `NetworkUtils.validateExternalUrl` 阻断内网/回环/保留地址访问 |
 | 图片上传 | 白名单校验扩展名（png/jpg/jpeg/gif/webp），拒绝非图片文件 |
 
 ### 速率限制
 
-17 条精细化限流规则，覆盖所有敏感端点：
+21 条精细化限流规则，覆盖所有敏感端点：
 
 | 端点 | 限制 |
 |------|------|
@@ -187,7 +187,7 @@ System Rules → Custom Prompt → Long-term Memory → Conversation Summary
 ### HTTP 安全头
 
 ```http
-Content-Security-Policy: default-src 'self'; frame-ancestors 'none'
+Content-Security-Policy: default-src 'self'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https:; frame-ancestors 'none'
 Strict-Transport-Security: max-age=31536000; includeSubDomains
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
@@ -206,6 +206,8 @@ X-Frame-Options: DENY
 |------|------|
 | 余额预扣 | 调用前预估 Token 并预留余额，失败自动释放 |
 | 乐观锁扣费 | `@Version` + 3 次重试，防止并发重复扣费 |
+| 赞助审核 | 用户上传凭证 → 管理员审核后发放 Token |
+| 每日签到 | 每日签到领取免费 Token |
 | 估算兜底 | API 未返回 usage 时按字符数估算，确保不遗漏 |
 
 ---
@@ -337,10 +339,10 @@ aichat/
 │   │       ├── ToolHandler.java         # 工具接口
 │   │       ├── SearchWebTool.java       # 双引擎联网搜索
 │   │       └── AnalyzeImageTool.java    # 图片分析
-│   ├── model/                           # JPA 实体（21 个）
-│   ├── repository/                      # Spring Data JPA（24 个）
+│   ├── model/                           # JPA 实体（27 个）
+│   ├── repository/                      # Spring Data JPA（27 个）
 │   └── util/
-│       ├── AESUtil.java                 # AES-256-GCM 加密
+│       ├── AESUtil.java                 # AES-128-GCM 加密
 │       ├── JwtUtil.java                 # JWT 签发/验证
 │       └── NetworkUtils.java            # SSRF 防护
 ├── src/main/resources/
