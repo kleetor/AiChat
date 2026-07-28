@@ -81,7 +81,7 @@ export default function ChatMessages({ messages, isGenerating, onDeleteMessage }
                 {new Date(msg.createdAt).toLocaleString()}
               </span>
             )}
-            {onDeleteMessage && msg.isLocal && (
+            {onDeleteMessage && (
               <button
                 onClick={() => onDeleteMessage(msg.id)}
                 className="absolute -top-2 -right-2 p-0.5 rounded bg-background border opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"

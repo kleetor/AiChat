@@ -9,6 +9,7 @@ import com.example.aichat.repository.ChatMessageRepository;
 import com.example.aichat.repository.ConversationRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -58,13 +59,12 @@ public class ChatHistoryService {
     }
 
     // 删除单条消息（需权限校验）
+    @Transactional
     public void deleteMessage(Long messageId, Long userId) {
-        ChatMessage msg = chatMessageRepository.findById(messageId)
-                .orElseThrow(() -> BusinessException.notFound("消息不存在"));
-        if (!msg.getUser().getId().equals(userId)) {
+        if (chatMessageRepository.countByIdAndUserId(messageId, userId) == 0) {
             throw BusinessException.forbidden("无权删除此消息");
         }
-        chatMessageRepository.delete(msg);
+        chatMessageRepository.deleteById(messageId);
     }
 }
 

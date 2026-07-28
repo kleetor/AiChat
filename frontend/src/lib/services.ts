@@ -152,13 +152,13 @@ export async function getChatHistory(conversationId: number): Promise<ChatHistor
   const messages: ChatMessage[] = [];
   for (const r of (raw.messages || [])) {
     messages.push({
-      id: r.id * 2 - 1,
+      id: r.id,       // 直接用 DB ID，删除时原样回传
       role: "user",
       content: r.userMessage || "",
       createdAt: r.timestamp,
     });
     messages.push({
-      id: r.id * 2,
+      id: -r.id,      // 负数 ID，取绝对值即可还原 DB ID
       role: "assistant",
       content: r.aiReply || "",
       createdAt: r.timestamp,
@@ -168,7 +168,9 @@ export async function getChatHistory(conversationId: number): Promise<ChatHistor
 }
 
 export function deleteChatMessage(id: number): Promise<void> {
-  return apiDelete(`/api/chat/messages/${id}`);
+  // 正数=user，负数=assistant，绝对值=DB ID
+  const dbId = id > 0 ? id : -id;
+  return apiDelete(`/api/chat/messages/${dbId}`);
 }
 
 // ---- Model Configs ----

@@ -119,7 +119,9 @@ public class ChatController {
             return ResponseEntity.status(403).body(null);
         }
         ChatHistoryResponse history = chatHistoryService.getChatHistoryByConversation(conversationId);
-        return ResponseEntity.ok(history);
+        return ResponseEntity.ok()
+                .header("Cache-Control", "no-store, no-cache, must-revalidate")
+                .body(history);
     }
 
     // 会话管理
