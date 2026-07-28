@@ -75,10 +75,6 @@ export default function KBModal({ open, onClose }: KBModalProps) {
     try {
       const list = await getKBDocuments(kbId);
       setDocs(list);
-      if (list.every(d => d.status !== "PROCESSING") && pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
     } catch { /* ignore */ }
   };
 
