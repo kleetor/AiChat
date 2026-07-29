@@ -12,6 +12,7 @@ import MessageModal from "@/components/modals/MessageModal";
 import FriendModal from "@/components/modals/FriendModal";
 import KBModal from "@/components/modals/KBModal";
 import MemoryModal from "@/components/modals/MemoryModal";
+import { Info } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useConversations } from "@/lib/hooks/useConversations";
 import { useChat } from "@/lib/hooks/useChat";
@@ -49,6 +50,7 @@ export default function App() {
   const [inputValue, setInputValue] = useState("");
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
+  const [showLoginAbout, setShowLoginAbout] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
 
   // Models
@@ -86,6 +88,13 @@ export default function App() {
       notif.loadUnreadCount(),
       friends.loadFriends(),
     ]);
+  }, [isLoggedIn]);
+
+  // ---- Show about modal on first login ----
+  useEffect(() => {
+    if (isLoggedIn && !localStorage.getItem("hana_about_seen")) {
+      setShowLoginAbout(true);
+    }
   }, [isLoggedIn]);
 
   // ---- Models ----
@@ -417,6 +426,51 @@ export default function App() {
         open={activeModal === "memory"}
         onClose={() => setActiveModal(null)}
       />
+
+      {/* 首次登录免责弹窗 */}
+      {showLoginAbout && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/40" />
+          <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-[420px] mx-4 border border-border p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold flex items-center gap-2">
+                <Info size={16} /> 使用须知
+              </h2>
+            </div>
+            <div className="space-y-4 text-sm text-muted-foreground leading-relaxed">
+              <p>
+                本项目为开源项目，源代码托管于 GitHub：
+              </p>
+              <a
+                href="https://github.com/kleetor/HanaChat-ai-chat-web-student-wip/tree/master"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-foreground underline hover:opacity-70 transition-opacity"
+              >
+                github.com/kleetor/HanaChat
+              </a>
+              <hr style={{ borderColor: "hsl(var(--border))" }} />
+              <p>
+                免责声明：本网站仅用于代码功能展示与技术交流，不提供任何商业服务。网站中所展示的支付、赞助等功能均为技术演示，不涉及真实资金交易。请勿将其用于任何违法违规用途。
+              </p>
+              <hr style={{ borderColor: "hsl(var(--border))" }} />
+              <p>
+                数据隐私声明：请勿在对话中发送个人隐私信息（如身份证号、银行卡号、密码等）给AI模型。本网站存储的用户聊天记录仅用于对话功能实现，不会用于其他目的。用户可随时通过删除按钮清除聊天记录。
+              </p>
+              <hr style={{ borderColor: "hsl(var(--border))" }} />
+              <p>
+                联系方式：<a href="mailto:1405921723@qq.com" className="text-foreground underline hover:opacity-70 transition-opacity">1405921723@qq.com</a>
+              </p>
+            </div>
+            <button
+              onClick={() => { setShowLoginAbout(false); localStorage.setItem("hana_about_seen", "1"); }}
+              className="w-full mt-6 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90"
+            >
+              我知道了
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

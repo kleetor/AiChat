@@ -1,10 +1,8 @@
 package com.example.aichat.dto;
 
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 public class FriendRequestDTO {
-    @NotNull
     private Long userId;
     private Long friendshipId;
     @Size(max = 500, message = "消息内容不能超过500字")

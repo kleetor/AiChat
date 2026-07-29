@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, FileText, Plus, Globe, Pencil, Trash2 } from "lucide-react";
+import { X, FileText, Plus, Sparkles, Pencil, Trash2 } from "lucide-react";
 import type { Prompt } from "@/lib/services";
 
 interface PromptModalProps {
@@ -133,10 +133,10 @@ export default function PromptModal({
                   <p className="text-[11px] text-muted-foreground/60 text-center py-6">暂无提示词</p>
                 ) : (
                   prompts.map((p) => (
-                    <button
+                    <div
                       key={p.id}
                       onClick={() => { onSelectPrompt(p); onClose(); }}
-                      className="w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between gap-2 group hover:bg-accent transition-colors"
+                      className="w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between gap-2 group hover:bg-accent transition-colors cursor-pointer"
                     >
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-foreground truncate">{p.name}</p>
@@ -148,7 +148,7 @@ export default function PromptModal({
                         <button onClick={async (e) => { e.stopPropagation(); await onDeletePrompt(p.id); }}
                           className="p-1 rounded text-muted-foreground hover:text-destructive"><Trash2 size={12} /></button>
                       </div>
-                    </button>
+                    </div>
                   ))
                 )}
               </div>
@@ -162,7 +162,7 @@ export default function PromptModal({
                 <button onClick={onHubOpen}
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-medium text-muted-foreground hover:bg-accent"
                   style={{ borderColor: "hsl(var(--border))" }}>
-                  <Globe size={13} /> 提示词社区
+                  <Sparkles size={13} /> 提示词社区
                 </button>
               </div>
 

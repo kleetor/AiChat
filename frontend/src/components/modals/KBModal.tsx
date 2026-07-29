@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Upload, Trash2, RefreshCw, Plus, Edit2, ArrowLeft } from "lucide-react";
+import { X, Upload, Trash2, RefreshCw, Plus, Edit2, ArrowLeft, Folder, Database } from "lucide-react";
 import {
   getKBList, createKB, updateKB, deleteKB,
   getKBDocuments, uploadKBDocument, deleteKBDocument, reindexKBDocument,
@@ -115,7 +115,7 @@ export default function KBModal({ open, onClose }: KBModalProps) {
             {currentKb && (
               <button onClick={goBack} className="p-1 rounded-md text-muted-foreground hover:text-foreground"><ArrowLeft size={15} /></button>
             )}
-            <h2 className="text-base font-semibold">{currentKb ? `📁 ${currentKb.name}` : "知识库管理"}</h2>
+            <h2 className="text-base font-semibold flex items-center gap-2">{currentKb ? <><Folder size={16} /> {currentKb.name}</> : <><Database size={16} /> 知识库管理</>}</h2>
           </div>
           <button onClick={onClose} className="p-1 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"><X size={16} /></button>
         </div>

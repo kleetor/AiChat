@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Plus, Edit2, Trash2, Search, RefreshCw } from "lucide-react";
+import { X, Plus, Edit2, Trash2, Search, RefreshCw, Brain } from "lucide-react";
 import {
   getMemoryList, getMemoryEnabled, addMemory, updateMemory, toggleMemory, deleteMemory, clearMemories, searchMemories,
   type MemoryItem,
@@ -97,7 +97,7 @@ export default function MemoryModal({ open, onClose }: MemoryModalProps) {
       <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-[640px] max-h-[80vh] mx-4 border border-border flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
-          <h2 className="text-base font-semibold flex items-center gap-2">🧠 长期记忆</h2>
+          <h2 className="text-base font-semibold flex items-center gap-2"><Brain size={18} /> 长期记忆</h2>
           <button onClick={onClose} className="p-1 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"><X size={16} /></button>
         </div>
 
