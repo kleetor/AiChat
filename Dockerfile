@@ -1,7 +1,7 @@
 FROM eclipse-temurin:17-jre-alpine
 
-# 设置时区 & 安装 curl、su、Tesseract OCR（用于扫描件识别）
-RUN apk add --no-cache tzdata curl tesseract-ocr tesseract-ocr-data-chi_sim tesseract-ocr-data-eng && \
+# 设置时区 & 安装 curl、su
+RUN apk add --no-cache tzdata curl && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo "Asia/Shanghai" > /etc/timezone
 

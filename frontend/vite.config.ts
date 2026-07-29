@@ -54,11 +54,6 @@ export default defineConfig({
   build: {
     outDir: '../src/main/resources/static',
     emptyOutDir: false,
-    minify: 'esbuild',
-    esbuild: {
-      // ts-expect-error: Vite types may not expose esbuild.drop, but it's supported by underlying esbuild
-      // @ts-ignore
-      drop: ['console', 'debugger'],
-    },
+    minify: 'oxc',
   },
 })

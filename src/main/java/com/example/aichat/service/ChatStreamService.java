@@ -85,9 +85,9 @@ public class ChatStreamService {
      */
     public SseEmitter streamDeepSeek(ArrayNode messages, ModelConfig config,
                                       Long conversationId, String userMessage, Long userId,
-                                      Boolean longMemoryEnabled, Long promptId) {
+                                      Boolean longMemoryEnabled, Long promptId, String fileUrl) {
         return doStream(messages, config, conversationId, userMessage, userId,
-                longMemoryEnabled, promptId, Collections.emptyList(), 0);
+                longMemoryEnabled, promptId, Collections.emptyList(), 0, fileUrl);
     }
 
     /**
@@ -97,9 +97,9 @@ public class ChatStreamService {
     public SseEmitter streamWithToolLoop(ArrayNode messages, ModelConfig config,
                                           Long conversationId, String userMessage, Long userId,
                                           Boolean longMemoryEnabled, Long promptId,
-                                          List<ToolDefinition> tools, int round) {
+                                          List<ToolDefinition> tools, int round, String fileUrl) {
         return doStream(messages, config, conversationId, userMessage, userId,
-                longMemoryEnabled, promptId, tools, round);
+                longMemoryEnabled, promptId, tools, round, fileUrl);
     }
 
     // ==================== 核心流式方法 ====================
@@ -112,7 +112,7 @@ public class ChatStreamService {
     private SseEmitter doStream(ArrayNode messages, ModelConfig config,
                                  Long conversationId, String userMessage, Long userId,
                                  Boolean longMemoryEnabled, Long promptId,
-                                 List<ToolDefinition> tools, int round) {
+                                 List<ToolDefinition> tools, int round, String fileUrl) {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         String apiUrl = config.getApiUrl();
         String apiKey = config.getApiKey();
@@ -224,7 +224,7 @@ public class ChatStreamService {
                     String completeResponse = fullResponse.toString();
                     Long savedMessageId = null;
                     if (!completeResponse.isEmpty()) {
-                        ChatMessage saved = chatHistoryService.saveMessage(conversationId, userId, userMessage, completeResponse);
+                        ChatMessage saved = chatHistoryService.saveMessage(conversationId, userId, userMessage, completeResponse, fileUrl);
                         savedMessageId = saved.getId();
                         updateConversationTitleIfNeeded(conversationId, userMessage);
                     }

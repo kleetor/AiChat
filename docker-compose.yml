@@ -69,6 +69,7 @@ services:
       MEMORY_LLM_API_KEY: ${MEMORY_LLM_API_KEY:-}
       MEMORY_LLM_API_URL: ${MEMORY_LLM_API_URL:-https://api.deepseek.com/v1/chat/completions}
       MEMORY_LLM_MODEL_NAME: ${MEMORY_LLM_MODEL_NAME:-deepseek-chat}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://www.man8out.xyz,http://localhost:5173,http://localhost:8080}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
       S3_URL_PREFIX: ${S3_URL_PREFIX:-}

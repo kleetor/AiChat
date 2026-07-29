@@ -24,7 +24,7 @@ public class ChatHistoryService {
     private ConversationRepository conversationRepository;
 
     // 保存消息（需传入 conversationId，内部验证会话存在）
-    public ChatMessage saveMessage(Long conversationId, Long userId, String userMessage, String aiReply) {
+    public ChatMessage saveMessage(Long conversationId, Long userId, String userMessage, String aiReply, String fileUrl) {
         Conversation conv = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> BusinessException.notFound("会话不存在"));
         if (!conv.getUser().getId().equals(userId)) {
@@ -35,6 +35,7 @@ public class ChatHistoryService {
                 .conversation(conv)
                 .userMessage(userMessage)
                 .aiReply(aiReply)
+                .fileUrl(fileUrl)
                 .build();
         return chatMessageRepository.save(msg);
     }
@@ -50,6 +51,7 @@ public class ChatHistoryService {
                     record.setUserMessage(m.getUserMessage());
                     record.setAiReply(m.getAiReply());
                     record.setTimestamp(m.getTimestamp());
+                    record.setFileUrl(m.getFileUrl());
                     return record;
                 })
                 .collect(Collectors.toList());

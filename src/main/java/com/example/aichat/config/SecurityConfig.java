@@ -13,6 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -28,20 +29,29 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        // Spring Security 7 的 MvcRequestMatcher 对 /** 通配符模式匹配不可靠，
+        // 使用自定义 RequestMatcher 直接检查 URI 确保静态资源 permitAll() 生效。
+        RequestMatcher staticResources = staticResourceMatcher();
+
         http
                 .cors(org.springframework.security.config.Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // ===== 静态资源（最优先，使用显式 AntPathRequestMatcher）=====
+                        .requestMatchers(staticResources).permitAll()
+                        // ===== 页面路由 =====
                         .requestMatchers("/", "/index.html", "/login", "/chat", "/prompt-hub", "/workshop",
                                 "/kb-manager", "/memory-manager", "/admin").permitAll()
+                        // ===== 公开 API =====
                         .requestMatchers("/api/auth/send-code", "/api/auth/register", "/api/auth/login",
                                 "/api/auth/send-reset-code", "/api/auth/reset-password").permitAll()
                         .requestMatchers("/api/admin/login").permitAll()
+                        // ===== 管理员 API =====
                         .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
-                        .requestMatchers("/favicon.ico").permitAll()
-                        .requestMatchers("/**/*.css", "/**/*.js", "/**/*.png", "/**/*.svg", "/**/*.ico").permitAll()
+                        // ===== 上传文件 =====
                         .requestMatchers("/uploads/**").permitAll()
+                        // ===== 其他所有请求需要认证 =====
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex
@@ -65,15 +75,41 @@ public class SecurityConfig {
                         .contentSecurityPolicy(csp -> csp
                                 .policyDirectives(
                                         "default-src 'self'; " +
-                                        "script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; " +
-                                        "style-src 'self' 'unsafe-inline'; " +
+                                        "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com; " +
+                                        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
                                         "img-src 'self' data: blob: https:; " +
-                                        "font-src 'self'; " +
-                                        "connect-src 'self' https:; " +
+                                        "font-src 'self' https://fonts.gstatic.com; " +
+                                        "connect-src 'self' https: https://static.cloudflareinsights.com https://cloudflareinsights.com; " +
                                         "frame-ancestors 'none'"))
                 )
         ;
         return http.build();
+    }
+
+    /**
+     * 构建静态资源匹配器，通过直接检查请求 URI 绕过 Spring Security 7
+     * 的 MvcRequestMatcher 模式匹配问题。
+     */
+    private RequestMatcher staticResourceMatcher() {
+        return request -> {
+            String uri = request.getRequestURI();
+            // 路径前缀
+            if (uri.startsWith("/assets/") || uri.startsWith("/uploads/")) {
+                return true;
+            }
+            // 根路径具体文件
+            if (uri.equals("/favicon.ico") || uri.equals("/favicon.svg")
+                    || uri.equals("/icons.svg") || uri.equals("/HanaChat.png")) {
+                return true;
+            }
+            // 扩展名通配（兜底）
+            for (String ext : new String[]{".css", ".js", ".png", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".eot"}) {
+                if (uri.endsWith(ext)) {
+                    return true;
+                }
+            }
+            return false;
+        };
     }
 
     @Bean

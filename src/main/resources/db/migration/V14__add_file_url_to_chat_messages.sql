@@ -1,0 +1,1 @@
+ALTER TABLE chat_messages ADD COLUMN file_url VARCHAR(2048) DEFAULT NULL;

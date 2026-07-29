@@ -1039,7 +1039,6 @@ rerank(query, candidates, topN)
 | Java | 17 | 运行时 | `eclipse-temurin:17-jre` (基于 Dockerfile) |
 | MySQL | 8.0 | 主数据库 | `mysql:8.0` |
 | ChromaDB | 0.6.3 | 向量存储 | `chromadb/chroma:0.6.3` |
-| Tesseract OCR | - | PDF OCR 回退 | 内置在 Docker 基础镜像中（计划中） |
 
 ### 13.2 后端 Maven 依赖
 

@@ -32,6 +32,9 @@ public class ChatMessage {
     @Column(nullable = false, columnDefinition = "DATETIME")
     private LocalDateTime timestamp;
 
+    @Column(length = 2048)
+    private String fileUrl;
+
 
     @PrePersist
     protected void onCreate() {

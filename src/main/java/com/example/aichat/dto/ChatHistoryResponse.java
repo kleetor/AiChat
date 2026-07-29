@@ -14,5 +14,6 @@ public class ChatHistoryResponse {
         private String userMessage;
         private String aiReply;
         private LocalDateTime timestamp;
+        private String fileUrl;
     }
 }

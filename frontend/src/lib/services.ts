@@ -143,6 +143,7 @@ interface RawMessageRecord {
   userMessage: string;
   aiReply: string;
   timestamp: string;
+  fileUrl?: string | null;
 }
 
 export async function getChatHistory(conversationId: number): Promise<ChatHistoryResponse> {
@@ -152,10 +153,11 @@ export async function getChatHistory(conversationId: number): Promise<ChatHistor
   const messages: ChatMessage[] = [];
   for (const r of (raw.messages || [])) {
     messages.push({
-      id: r.id,       // 直接用 DB ID，删除时原样回传
+      id: r.id,
       role: "user",
       content: r.userMessage || "",
       createdAt: r.timestamp,
+      fileUrl: r.fileUrl || null,
     });
     messages.push({
       id: -r.id,      // 负数 ID，取绝对值即可还原 DB ID
