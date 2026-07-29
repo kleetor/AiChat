@@ -6,6 +6,8 @@
 
 **AI that remembers, understands, and acts for you.** A multi-model AI chat platform with human-like long-term memory and RAG knowledge base, featuring autonomous tool calling. Built with Spring Boot 4 + React 19.
 
+> **Live Demo:** [www.man8out.xyz](https://www.man8out.xyz)
+
 ---
 
 ## Highlights

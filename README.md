@@ -6,6 +6,8 @@
 
 **让 AI 记住你、理解你、代替你干活。** 一个自带仿人类长期记忆和 RAG 知识库的多模型 AI 聊天平台，支持 AI 自主调用外部工具，用 Spring Boot 4 + React 19 构建。
 
+> **在线体验：**[www.man8out.xyz](https://www.man8out.xyz)
+
 ---
 
 ## 核心特点
