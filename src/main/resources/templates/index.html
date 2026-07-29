@@ -255,7 +255,18 @@
         <div id="newPasswordError" class="error-msg"></div>
     </div>
 </div>
-<!-- 赞助模态框 -->
+<!-- 赞助提示框 -->
+<div class="modal-overlay" id="sponsorModal">
+    <div class="modal" style="max-width: 400px; text-align: center;">
+        <h2><i data-lucide="heart"></i> 赞助支持</h2>
+        <p style="color:#6b7280; font-size:15px; margin: 24px 0; line-height: 1.8;">
+            该功能暂不支持，敬请期待
+        </p>
+        <a id="closeSponsorModalBtn" style="color:#6b7280; cursor:pointer; font-size:14px;">关闭</a>
+    </div>
+</div>
+
+<!-- 原赞助模态框（暂注释，后续恢复）
 <div class="modal-overlay" id="sponsorModal">
     <div class="modal" style="max-width: 600px;">
         <h2><i data-lucide="heart"></i> 赞助支持</h2>
@@ -263,14 +274,12 @@
             请扫描下方收款码进行赞助，完成后上传赞助截图，管理员审核后将为您发放对应 Token。注意上传的赞助截图需要备注您的用户PID。
         </p>
         <div class="sponsor-layout">
-            <!-- 左侧：收款码 -->
             <div class="sponsor-left">
                 <h4><i data-lucide="smartphone"></i> 微信收款码</h4>
                 <img src="/uploads/Storepic/weixinPic.png" alt="收款码" class="sponsor-qrcode" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
                 <p class="sponsor-qrcode-fallback" style="display:none; color:#9ca3af; font-size:13px; padding:20px;">收款码图片加载中...</p>
                 <p style="font-size:12px; color:#9ca3af; margin-top:8px;">请使用微信扫描二维码</p>
             </div>
-            <!-- 右侧：上传截图 -->
             <div class="sponsor-right">
                 <h4><i data-lucide="paperclip"></i> 上传赞助截图</h4>
                 <div class="upload-area" id="sponsorUploadArea">
@@ -297,6 +306,7 @@
         </div>
     </div>
 </div>
+-->
 
 <!-- 消息通知模态框 -->
 <div class="modal-overlay" id="messageModal">

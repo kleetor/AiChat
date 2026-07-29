@@ -1706,6 +1706,23 @@
     // ======== 赞助功能 ========
     const btnSponsor = document.getElementById('btnSponsor');
     const sponsorModal = document.getElementById('sponsorModal');
+    const closeSponsorModalBtn = document.getElementById('closeSponsorModalBtn');
+
+    btnSponsor.addEventListener('click', function() {
+        sponsorModal.classList.add('show');
+    });
+
+    function closeSponsorModal() {
+        sponsorModal.classList.remove('show');
+    }
+
+    sponsorModal.addEventListener('click', function(e) {
+        if (e.target === sponsorModal) closeSponsorModal();
+    });
+
+    closeSponsorModalBtn.addEventListener('click', closeSponsorModal);
+
+    /* 原赞助功能（暂注释，后续恢复）
     const sponsorUploadArea = document.getElementById('sponsorUploadArea');
     const sponsorUploadPlaceholder = document.getElementById('sponsorUploadPlaceholder');
     const sponsorFileInput = document.getElementById('sponsorFileInput');
@@ -1714,12 +1731,8 @@
     const sponsorAmount = document.getElementById('sponsorAmount');
     const sponsorError = document.getElementById('sponsorError');
     const sponsorSuccess = document.getElementById('sponsorSuccess');
-    const closeSponsorModalBtn = document.getElementById('closeSponsorModalBtn');
 
     let selectedSponsorFile = null;
-    
-    // 打开赞助模态框
-    btnSponsor.addEventListener('click', showSponsorModal);
     
     function showSponsorModal() {
         resetSponsorForm();
@@ -1738,39 +1751,25 @@
         btnSponsorCreate.innerHTML = '<i data-lucide="upload"></i> 创建赞助审核';
         lucide.createIcons();
     }
-    
-    // 关闭赞助模态框
-    function closeSponsorModal() {
-        sponsorModal.classList.remove('show');
-        resetSponsorForm();
-    }
-    
-    sponsorModal.addEventListener('click', function(e) {
-        if (e.target === sponsorModal) closeSponsorModal();
-    });
-    
-    closeSponsorModalBtn.addEventListener('click', closeSponsorModal);
-    
-    // 点击上传区域选择文件
+
     sponsorUploadArea.addEventListener('click', function(e) {
         if (e.target !== sponsorPreview) {
             sponsorFileInput.click();
         }
     });
-    
-    // 拖拽上传支持
+
     sponsorUploadArea.addEventListener('dragover', function(e) {
         e.preventDefault();
         this.style.borderColor = '#4f46e5';
         this.style.background = '#f0f4ff';
     });
-    
+
     sponsorUploadArea.addEventListener('dragleave', function(e) {
         e.preventDefault();
         this.style.borderColor = '#d1d5db';
         this.style.background = '#fafafa';
     });
-    
+
     sponsorUploadArea.addEventListener('drop', function(e) {
         e.preventDefault();
         this.style.borderColor = '#d1d5db';
@@ -1780,14 +1779,13 @@
             handleSponsorFile(files[0]);
         }
     });
-    
-    // 文件选择事件
+
     sponsorFileInput.addEventListener('change', function() {
         if (this.files.length > 0) {
             handleSponsorFile(this.files[0]);
         }
     });
-    
+
     function handleSponsorFile(file) {
         const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif'];
         if (!allowedTypes.includes(file.type)) {
@@ -1800,10 +1798,8 @@
             sponsorError.classList.add('show');
             return;
         }
-        
         sponsorError.classList.remove('show');
         selectedSponsorFile = file;
-        
         const reader = new FileReader();
         reader.onload = function(e) {
             sponsorPreview.src = e.target.result;
@@ -1812,41 +1808,34 @@
         };
         reader.readAsDataURL(file);
     }
-    
-    // 创建赞助审核
+
     btnSponsorCreate.addEventListener('click', async function() {
         if (!selectedSponsorFile) {
             sponsorError.textContent = '请先选择赞助截图';
             sponsorError.classList.add('show');
             return;
         }
-        
         const amountVal = sponsorAmount.value.trim();
         if (!amountVal || parseFloat(amountVal) <= 0) {
             sponsorError.textContent = '请输入有效的赞助金额';
             sponsorError.classList.add('show');
             return;
         }
-        
         sponsorError.classList.remove('show');
         sponsorSuccess.style.display = 'none';
         btnSponsorCreate.disabled = true;
         btnSponsorCreate.innerHTML = '<i data-lucide="loader-circle"></i> 提交中...';
         lucide.createIcons();
-        
         try {
             const formData = new FormData();
             formData.append('image', selectedSponsorFile);
             formData.append('amount', amountVal);
-            
             const res = await fetch(API + '/api/billing/sponsor-create', {
                 method: 'POST',
                 headers: { 'Authorization': 'Bearer ' + token },
                 body: formData
             });
-            
             const data = await res.json();
-            
             if (!res.ok || !data.success) {
                 sponsorError.textContent = data.message || '提交失败';
                 sponsorError.classList.add('show');
@@ -1855,7 +1844,6 @@
                 lucide.createIcons();
                 return;
             }
-            
             sponsorSuccess.textContent = data.message || '赞助审核已提交，请等待管理员审核后发放 Token';
             sponsorSuccess.style.display = 'block';
             sponsorSuccess.classList.add('show');
@@ -1875,6 +1863,7 @@
             lucide.createIcons();
         }
     });
+    */
 
     // 加载知识库列表
     async function loadKnowledgeBases() {
