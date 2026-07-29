@@ -1,23 +1,25 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { X, Plus, Edit2, Trash2, Search, RefreshCw, Brain } from "lucide-react";
 import {
   getMemoryList, getMemoryEnabled, addMemory, updateMemory, toggleMemory, deleteMemory, clearMemories, searchMemories,
-  type MemoryItem,
+  type MemoryItem, type Prompt,
 } from "@/lib/services";
 
 interface MemoryModalProps {
   open: boolean;
   onClose: () => void;
+  prompts: Prompt[];
 }
 
 function formatDate(s: string) {
   try { return new Date(s).toLocaleDateString("zh-CN", { month: "short", day: "numeric" }); } catch { return s; }
 }
 
-export default function MemoryModal({ open, onClose }: MemoryModalProps) {
+export default function MemoryModal({ open, onClose, prompts }: MemoryModalProps) {
   const [memories, setMemories] = useState<MemoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<"all" | "enabled" | "search">("all");
+  const [filterPromptId, setFilterPromptId] = useState<number | "all">("all");
 
   // Search
   const [searchQuery, setSearchQuery] = useState("");
@@ -89,6 +91,18 @@ export default function MemoryModal({ open, onClose }: MemoryModalProps) {
     return <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${x.c}`}>{x.t}</span>;
   };
 
+  // 提示词名称映射
+  const getPromptName = (promptId?: number): string | null => {
+    if (promptId == null) return null;
+    return prompts.find(p => p.id === promptId)?.name ?? null;
+  };
+
+  // 筛选后的记忆列表
+  const filtered = useMemo(() => {
+    if (filterPromptId === "all") return memories;
+    return memories.filter(m => m.promptId === filterPromptId);
+  }, [memories, filterPromptId]);
+
   if (!open) return null;
 
   return (
@@ -116,8 +130,8 @@ export default function MemoryModal({ open, onClose }: MemoryModalProps) {
           </button>
         </div>
 
-        {/* Tabs + Search */}
-        <div className="flex items-center gap-2 px-5 py-2 border-b border-border shrink-0">
+        {/* Tabs + Filter */}
+        <div className="flex items-center gap-2 px-5 py-2 border-b border-border shrink-0 flex-wrap">
           <div className="flex gap-1 bg-muted rounded-lg p-0.5">
             {(["all", "enabled", "search"] as const).map(t => (
               <button key={t} onClick={() => setTab(t)}
@@ -126,6 +140,17 @@ export default function MemoryModal({ open, onClose }: MemoryModalProps) {
               </button>
             ))}
           </div>
+          <select
+            value={filterPromptId}
+            onChange={e => setFilterPromptId(e.target.value === "all" ? "all" : Number(e.target.value))}
+            className="text-[11px] px-2 py-1.5 rounded-md border bg-transparent outline-none"
+            style={{ borderColor: "hsl(var(--border))" }}
+          >
+            <option value="all">所有提示词</option>
+            {prompts.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
           {tab === "search" && (
             <div className="flex gap-1.5 flex-1">
               <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
@@ -139,17 +164,22 @@ export default function MemoryModal({ open, onClose }: MemoryModalProps) {
         {/* List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {loading && <p className="text-xs text-muted-foreground text-center py-8">加载中...</p>}
-          {!loading && memories.length === 0 && (
+          {!loading && filtered.length === 0 && (
             <p className="text-xs text-muted-foreground text-center py-8">
               {tab === "search" ? "没有找到匹配的记忆" : "暂无记忆，AI会在对话中自动提取"}
             </p>
           )}
-          {memories.map(m => (
+          {filtered.map(m => (
             <div key={m.id} className={`p-3 rounded-xl border border-border ${m.enabled ? "" : "opacity-45"}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="text-xs leading-relaxed break-words">{m.value}</p>
                   <p className="text-[10px] text-muted-foreground mt-1.5 flex items-center gap-2 flex-wrap">
+                    {getPromptName(m.promptId) && (
+                      <span className="bg-violet-100 text-violet-700 text-[10px] px-1.5 py-0.5 rounded-md font-medium">
+                        {getPromptName(m.promptId)}
+                      </span>
+                    )}
                     {detailLabel(m.detailLevel)}
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${m.source === "MANUAL" ? "bg-blue-100 text-blue-700" : "bg-muted text-muted-foreground"}`}>{m.source === "MANUAL" ? "手动" : "自动"}</span>
                     <span>{m.accessCount}次访问</span>

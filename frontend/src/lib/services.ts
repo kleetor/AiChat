@@ -364,6 +364,7 @@ export interface MemoryItem {
   accessCount: number;
   conversationId?: number;
   enabled: boolean;
+  promptId?: number;
   createdAt: string;
 }
 

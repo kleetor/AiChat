@@ -425,6 +425,7 @@ export default function App() {
       <MemoryModal
         open={activeModal === "memory"}
         onClose={() => setActiveModal(null)}
+        prompts={prompts}
       />
 
       {/* 首次登录免责弹窗 */}
