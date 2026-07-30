@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X, MessageSquarePlus } from "lucide-react";
 import type { Prompt } from "@/lib/services";
+import PromptSelector from "@/components/shared/PromptSelector";
 
 interface NewConversationDialogProps {
   open: boolean;
@@ -61,22 +62,11 @@ export default function NewConversationDialog({
           {/* 提示词选择 */}
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">选择提示词</label>
-            <select
-              value={selectedPromptId ?? ""}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSelectedPromptId(val ? Number(val) : null);
-              }}
-              className="w-full text-xs px-3 py-2 rounded-lg border bg-transparent outline-none"
-              style={{ borderColor: "hsl(var(--border))" }}
-            >
-              <option value="">无（共享会话）</option>
-              {prompts.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <PromptSelector
+              prompts={prompts}
+              value={selectedPromptId}
+              onChange={setSelectedPromptId}
+            />
           </div>
 
           {/* 按钮 */}

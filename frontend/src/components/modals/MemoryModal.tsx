@@ -4,6 +4,7 @@ import {
   getMemoryList, getMemoryEnabled, addMemory, updateMemory, toggleMemory, deleteMemory, clearMemories, searchMemories,
   type MemoryItem, type Prompt,
 } from "@/lib/services";
+import PromptSelector from "@/components/shared/PromptSelector";
 
 interface MemoryModalProps {
   open: boolean;
@@ -140,17 +141,12 @@ export default function MemoryModal({ open, onClose, prompts }: MemoryModalProps
               </button>
             ))}
           </div>
-          <select
-            value={filterPromptId}
-            onChange={e => setFilterPromptId(e.target.value === "all" ? "all" : Number(e.target.value))}
-            className="text-[11px] px-2 py-1.5 rounded-md border bg-transparent outline-none"
-            style={{ borderColor: "hsl(var(--border))" }}
-          >
-            <option value="all">所有提示词</option>
-            {prompts.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+          <PromptSelector
+            prompts={prompts}
+            value={filterPromptId === "all" ? null : filterPromptId}
+            onChange={(id) => setFilterPromptId(id ?? "all")}
+            placeholder="所有提示词"
+          />
           {tab === "search" && (
             <div className="flex gap-1.5 flex-1">
               <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
