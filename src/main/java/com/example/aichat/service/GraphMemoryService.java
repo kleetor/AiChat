@@ -73,10 +73,11 @@ public class GraphMemoryService {
 
     /**
      * 图扩展检索：从一条种子记忆出发，沿实体→关联记忆→邻接实体→关联记忆 做 1 跳扩展。
+     * 反查记忆时按 promptId 过滤，防止跨提示词记忆泄漏。
      *
      * @return 图扩展出的额外记忆（去重，不含种子记忆自身）
      */
-    public List<MemoryItem> expandViaGraph(Long seedItemId, int maxResults) {
+    public List<MemoryItem> expandViaGraph(Long seedItemId, int maxResults, Long promptId) {
         Set<Long> visited = new HashSet<>();
         visited.add(seedItemId);
         List<MemoryItem> results = new ArrayList<>();
@@ -88,20 +89,22 @@ public class GraphMemoryService {
         for (Long entityId : entityIds) {
             if (results.size() >= maxResults) break;
 
-            // 2a. 同实体关联的其他记忆
+            // 2a. 同实体关联的其他记忆（按 promptId 过滤）
             for (Long itemId : itemEntityRepo.findMemoryIdsByEntityId(entityId)) {
                 if (visited.add(itemId)) {
-                    memoryItemRepo.findById(itemId).ifPresent(results::add);
+                    memoryItemRepo.findByIdAndPromptAccessible(itemId, promptId)
+                            .ifPresent(results::add);
                     if (results.size() >= maxResults) break;
                 }
             }
 
-            // 2b. 沿出边找邻接实体 → 再找它们的关联记忆
+            // 2b. 沿出边找邻接实体 → 再找它们的关联记忆（按 promptId 过滤）
             for (MemoryRelation rel : relationRepo.findBySubjectId(entityId)) {
                 if (results.size() >= maxResults) break;
                 for (Long neighborItemId : itemEntityRepo.findMemoryIdsByEntityId(rel.getObjectId())) {
                     if (visited.add(neighborItemId)) {
-                        memoryItemRepo.findById(neighborItemId).ifPresent(results::add);
+                        memoryItemRepo.findByIdAndPromptAccessible(neighborItemId, promptId)
+                                .ifPresent(results::add);
                         if (results.size() >= maxResults) break;
                     }
                 }
@@ -112,7 +115,8 @@ public class GraphMemoryService {
                 if (results.size() >= maxResults) break;
                 for (Long neighborItemId : itemEntityRepo.findMemoryIdsByEntityId(rel.getSubjectId())) {
                     if (visited.add(neighborItemId)) {
-                        memoryItemRepo.findById(neighborItemId).ifPresent(results::add);
+                        memoryItemRepo.findByIdAndPromptAccessible(neighborItemId, promptId)
+                                .ifPresent(results::add);
                         if (results.size() >= maxResults) break;
                     }
                 }

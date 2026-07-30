@@ -35,6 +35,9 @@ public class Conversation {
     @Column(name = "created_at", nullable = false, columnDefinition = "DATETIME")
     private LocalDateTime createdAt;
 
+    @Column(name = "prompt_id")
+    private Long promptId;
+
 
     @PrePersist
     protected void onCreate() {

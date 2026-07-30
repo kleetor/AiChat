@@ -224,7 +224,7 @@ public class ChatStreamService {
                     String completeResponse = fullResponse.toString();
                     Long savedMessageId = null;
                     if (!completeResponse.isEmpty()) {
-                        ChatMessage saved = chatHistoryService.saveMessage(conversationId, userId, userMessage, completeResponse, fileUrl);
+                        ChatMessage saved = chatHistoryService.saveMessage(conversationId, userId, userMessage, completeResponse, fileUrl, promptId);
                         savedMessageId = saved.getId();
                         updateConversationTitleIfNeeded(conversationId, userMessage);
                     }

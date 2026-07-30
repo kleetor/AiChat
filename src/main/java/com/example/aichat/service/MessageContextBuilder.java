@@ -67,7 +67,7 @@ public class MessageContextBuilder {
                                          Long userId, Boolean longMemoryEnabled,
                                          String imageUrl, String fileUrl) {
         ArrayNode messagesArray = objectMapper.createArrayNode();
-        List<ChatMessage> history = getRecentHistory(conversationId);
+        List<ChatMessage> history = getRecentHistory(conversationId, promptId);
 
         // 0. 注入系统规则 (全局规则，sort_order 升序)
         try {
@@ -116,7 +116,7 @@ public class MessageContextBuilder {
                     for (MemoryItem seed : memories) {
                         if (allMemories.size() >= 20) break;
                         try {
-                            List<MemoryItem> expanded = graphMemoryService.expandViaGraph(seed.getId(), 5);
+                            List<MemoryItem> expanded = graphMemoryService.expandViaGraph(seed.getId(), 5, promptId);
                             for (MemoryItem m : expanded) {
                                 if (allMemories.size() >= 20) break;
                                 if (seenIds.add(m.getId())) {
@@ -239,9 +239,9 @@ public class MessageContextBuilder {
         return messagesArray;
     }
 
-    private List<ChatMessage> getRecentHistory(Long conversationId) {
+    private List<ChatMessage> getRecentHistory(Long conversationId, Long promptId) {
         List<ChatMessage> history = chatMessageRepository
-                .findByConversationIdOrderByTimestampAsc(conversationId);
+                .findByConversationIdAndPromptAccessible(conversationId, promptId);
         if (history.size() > MAX_HISTORY_SIZE) {
             history = history.subList(history.size() - MAX_HISTORY_SIZE, history.size());
         }

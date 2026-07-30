@@ -96,11 +96,15 @@ public class ChatService {
                               Boolean longMemoryEnabled, String imageUrl, String fileUrl) {
         ModelConfig config = validateAndGetConfig(conversationId, modelConfigId);
 
+        // 从会话读取 promptId，替代前端传入的值（提示词隔离）
+        var conversation = conversationRepository.findById(conversationId).orElseThrow();
+        Long effectivePromptId = conversation.getPromptId();
+
         boolean useToolCalling = shouldUseToolCalling(config, webSearchEnabled, imageUrl, fileUrl);
 
         // 构建消息数组（走工具调用时不注入搜索结果，降级路径在下面处理）
         ArrayNode messagesArray = messageContextBuilder.buildMessagesArray(
-                conversationId, promptId, userMessage, webSearchEnabled,
+                conversationId, effectivePromptId, userMessage, webSearchEnabled,
                 imageDescription, knowledgeBaseId, userId, longMemoryEnabled,
                 useToolCalling ? imageUrl : null,
                 useToolCalling ? fileUrl : null);
@@ -128,10 +132,10 @@ public class ChatService {
                 }
             }
 
-            chatHistoryService.saveMessage(conversationId, userId, userMessage, result.getReply(), fileUrl);
+            chatHistoryService.saveMessage(conversationId, userId, userMessage, result.getReply(), fileUrl, effectivePromptId);
             updateConversationTitleIfNeeded(conversationId, userMessage);
 
-            chatPostProcessor.triggerAsyncProcessing(userId, conversationId, userMessage, result.getReply(), longMemoryEnabled, promptId);
+            chatPostProcessor.triggerAsyncProcessing(userId, conversationId, userMessage, result.getReply(), longMemoryEnabled, effectivePromptId);
 
             return result;
         } catch (Exception e) {
@@ -155,10 +159,14 @@ public class ChatService {
                                   Boolean longMemoryEnabled, String imageUrl, String fileUrl) {
         ModelConfig config = validateAndGetConfig(conversationId, modelConfigId);
 
+        // 从会话读取 promptId，替代前端传入的值（提示词隔离）
+        var conversation = conversationRepository.findById(conversationId).orElseThrow();
+        Long effectivePromptId = conversation.getPromptId();
+
         boolean useToolCalling = shouldUseToolCalling(config, webSearchEnabled, imageUrl, fileUrl);
 
         ArrayNode messagesArray = messageContextBuilder.buildMessagesArray(
-                conversationId, promptId, userMessage, webSearchEnabled,
+                conversationId, effectivePromptId, userMessage, webSearchEnabled,
                 imageDescription, knowledgeBaseId, userId, longMemoryEnabled,
                 useToolCalling ? imageUrl : null,
                 useToolCalling ? fileUrl : null);
@@ -174,10 +182,10 @@ public class ChatService {
             logger.info("使用工具调用路径: tools={}, imageUrl={}", 
                     tools.stream().map(ToolDefinition::getName).toList(), imageUrl);
             return chatStreamService.streamWithToolLoop(messagesArray, config, conversationId,
-                    userMessage, userId, longMemoryEnabled, promptId, tools, 0, fileUrl);
+                    userMessage, userId, longMemoryEnabled, effectivePromptId, tools, 0, fileUrl);
         } else {
             return chatStreamService.streamDeepSeek(messagesArray, config, conversationId,
-                    userMessage, userId, longMemoryEnabled, promptId, fileUrl);
+                    userMessage, userId, longMemoryEnabled, effectivePromptId, fileUrl);
         }
     }
 

@@ -42,4 +42,10 @@ public interface MemoryItemRepository extends JpaRepository<MemoryItem, Long> {
     @Query("UPDATE MemoryItem m SET m.lastAccessedAt = :now, " +
            "m.accessCount = m.accessCount + 1 WHERE m.id IN :ids")
     int batchTouch(@Param("ids") List<Long> ids, @Param("now") LocalDateTime now);
+
+    /** 按 ID + prompt_id 查询，用于图扩展时的提示词隔离过滤 */
+    @Query("SELECT m FROM MemoryItem m WHERE m.id = :id AND m.enabled = true " +
+           "AND (m.promptId IS NULL OR m.promptId = :promptId)")
+    Optional<MemoryItem> findByIdAndPromptAccessible(@Param("id") Long id,
+                                                     @Param("promptId") Long promptId);
 }

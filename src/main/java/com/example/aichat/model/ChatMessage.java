@@ -35,6 +35,9 @@ public class ChatMessage {
     @Column(length = 2048)
     private String fileUrl;
 
+    @Column(name = "prompt_id")
+    private Long promptId;
+
 
     @PrePersist
     protected void onCreate() {

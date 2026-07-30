@@ -3,6 +3,8 @@ package com.example.aichat.controller;
 import com.example.aichat.dto.ChatHistoryResponse;
 import com.example.aichat.dto.ChatRequest;
 import com.example.aichat.dto.ChatResponse;
+import com.example.aichat.dto.ConversationResponse;
+import com.example.aichat.dto.CreateConversationRequest;
 import com.example.aichat.model.Conversation;
 import com.example.aichat.service.BillingService;
 import com.example.aichat.service.ChatHistoryService;
@@ -126,16 +128,17 @@ public class ChatController {
 
     // 会话管理
     @PostMapping("/conversations")
-    public ResponseEntity<Conversation> createConversation(Authentication authentication) {
+    public ResponseEntity<Conversation> createConversation(@RequestBody CreateConversationRequest request,
+                                                           Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        Conversation conv = conversationService.createConversation(userId);
+        Conversation conv = conversationService.createConversation(userId, request.getTitle(), request.getPromptId());
         return ResponseEntity.ok(conv);
     }
 
     @GetMapping("/conversations")
-    public ResponseEntity<List<Conversation>> getConversations(Authentication authentication) {
+    public ResponseEntity<List<ConversationResponse>> getConversations(Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        List<Conversation> convs = conversationService.getConversations(userId);
+        List<ConversationResponse> convs = conversationService.getConversations(userId);
         return ResponseEntity.ok(convs);
     }
 

@@ -16,4 +16,11 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     /** 校验消息归属，避免 lazy load User 实体 */
     @Query("SELECT COUNT(m) FROM ChatMessage m WHERE m.id = :id AND m.user.id = :userId")
     long countByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
+
+    /** 获取会话历史消息，按 promptId 过滤（共享=所有提示词可见，私有=仅该提示词可见） */
+    @Query("SELECT m FROM ChatMessage m WHERE m.conversation.id = :conversationId " +
+           "AND (m.promptId IS NULL OR m.promptId = :promptId) ORDER BY m.timestamp ASC")
+    List<ChatMessage> findByConversationIdAndPromptAccessible(
+            @Param("conversationId") Long conversationId,
+            @Param("promptId") Long promptId);
 }
