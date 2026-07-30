@@ -6,7 +6,6 @@ interface PromptModalProps {
   open: boolean;
   onClose: () => void;
   prompts: Prompt[];
-  onSelectPrompt: (prompt: Prompt) => void;
   onDeletePrompt: (id: number) => Promise<void>;
   onNewPrompt: () => void;
   onHubOpen: () => void;
@@ -18,7 +17,6 @@ export default function PromptModal({
   open,
   onClose,
   prompts,
-  onSelectPrompt,
   onDeletePrompt,
   onNewPrompt,
   onHubOpen,
@@ -135,8 +133,7 @@ export default function PromptModal({
                   prompts.map((p) => (
                     <div
                       key={p.id}
-                      onClick={() => { onSelectPrompt(p); onClose(); }}
-                      className="w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between gap-2 group hover:bg-accent transition-colors cursor-pointer"
+                      className="w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between gap-2 group hover:bg-accent transition-colors"
                     >
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-foreground truncate">{p.name}</p>

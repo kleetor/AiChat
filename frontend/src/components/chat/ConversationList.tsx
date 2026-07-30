@@ -7,6 +7,7 @@ interface Conversation {
   preview: string;
   time: string;
   active: boolean;
+  promptName?: string | null;
 }
 
 interface ConversationListProps {
@@ -39,7 +40,7 @@ export default function ConversationList({ conversations, activeId, onSelect, on
         >
           <div className="text-xs font-medium truncate leading-snug">{conv.title}</div>
           <div className="text-[11px] truncate mt-0.5 leading-relaxed text-muted-foreground/70">
-            {conv.time}
+            {conv.promptName ? `提示词: ${conv.promptName}` : conv.time}
           </div>
           {onDelete && (
             <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">

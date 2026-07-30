@@ -6,8 +6,10 @@ export interface Conversation {
   id: number;
   title: string;
   createdAt: string;
-  updatedAt: string;
-  userId: number;
+  updatedAt?: string;
+  userId?: number;
+  promptId?: number | null;
+  promptName?: string | null;
 }
 
 export interface ChatMessage {
@@ -21,7 +23,6 @@ export interface ChatMessage {
 
 export interface ChatRequest {
   message: string;
-  promptId?: number | null;
   modelConfigId?: number | null;
   webSearchEnabled?: boolean;
   imageDescription?: string | null;
@@ -114,8 +115,8 @@ export function getConversations(): Promise<Conversation[]> {
   return apiGet("/api/conversations");
 }
 
-export function createConversation(): Promise<Conversation> {
-  return apiPost("/api/conversations");
+export function createConversation(title?: string, promptId?: number | null): Promise<Conversation> {
+  return apiPost("/api/conversations", { title: title || null, promptId: promptId || null });
 }
 
 export function deleteConversation(id: number): Promise<void> {

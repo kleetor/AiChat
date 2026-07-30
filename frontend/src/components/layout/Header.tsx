@@ -1,7 +1,6 @@
 import { PanelLeftClose, PanelLeftOpen, User, BookOpen, Brain, FileText, MessageCircle, Users, LogIn, LogOut } from "lucide-react";
 import ModelSelector from "@/components/shared/ModelSelector";
 import BalanceDisplay from "@/components/shared/BalanceDisplay";
-import PromptIndicator from "@/components/shared/PromptIndicator";
 import KBSelector from "@/components/shared/KBSelector";
 
 interface ModelOption {
@@ -29,9 +28,6 @@ interface HeaderProps {
   username: string;
   isLoggedIn: boolean;
   avatarUrl?: string;
-  activePromptName: string | null;
-  onPromptClick: () => void;
-  onRemovePrompt: () => void;
   onToolClick: (id: string) => void;
   onBalanceClick?: () => void;
   onProfileClick?: () => void;
@@ -53,9 +49,6 @@ export default function Header({
   username,
   isLoggedIn,
   avatarUrl,
-  activePromptName,
-  onPromptClick,
-  onRemovePrompt,
   onToolClick,
   onBalanceClick,
   onProfileClick,
@@ -80,9 +73,6 @@ export default function Header({
       {modelOptions.length > 0 && (
         <ModelSelector options={modelOptions} selected={selectedModel} onSelect={onSelectModel} />
       )}
-
-      {/* Prompt indicator */}
-      <PromptIndicator promptName={activePromptName} onRemove={onRemovePrompt} onClick={onPromptClick} />
 
       {/* KB Selector */}
       {isLoggedIn && kbOptions && onKBChange && (

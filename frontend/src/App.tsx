@@ -8,6 +8,7 @@ import ChatMessages from "@/components/chat/ChatMessages";
 import WalletModal from "@/components/modals/WalletModal";
 import ProfileModal from "@/components/modals/ProfileModal";
 import PromptModal from "@/components/modals/PromptModal";
+import NewConversationDialog from "@/components/modals/NewConversationDialog";
 import MessageModal from "@/components/modals/MessageModal";
 import FriendModal from "@/components/modals/FriendModal";
 import KBModal from "@/components/modals/KBModal";
@@ -59,7 +60,7 @@ export default function App() {
 
   // Prompts
   const [prompts, setPrompts] = useState<Prompt[]>([]);
-  const [activePrompt, setActivePrompt] = useState<Prompt | null>(null);
+  const [showNewConvDialog, setShowNewConvDialog] = useState(false);
 
   // KB
   const [kbList, setKbList] = useState<KnowledgeBase[]>([]);
@@ -154,9 +155,13 @@ export default function App() {
     }
   };
 
-  const handleNewChat = async () => {
+  const handleNewChat = () => {
+    setShowNewConvDialog(true);
+  };
+
+  const handleCreateConversation = async (title: string, promptId: number | null) => {
     try {
-      const newConv = await conv.handleNewChat();
+      const newConv = await conv.handleNewChat(title || undefined, promptId);
       if (newConv) setMessages([]);
       setInputValue("");
     } catch {
@@ -171,7 +176,6 @@ export default function App() {
     const req = {
       message: inputValue.trim(),
       modelConfigId: selectedModelId,
-      promptId: activePrompt?.id || null,
       webSearchEnabled,
       knowledgeBaseId: selectedKBId,
       longMemoryEnabled: true,
@@ -203,7 +207,7 @@ export default function App() {
     }
 
     conv.loadConversations(); // refresh titles
-  }, [inputValue, isLoggedIn, selectedModelId, activePrompt, webSearchEnabled, selectedKBId, chat, conv, img, file]);
+  }, [inputValue, isLoggedIn, selectedModelId, webSearchEnabled, selectedKBId, chat, conv, img, file]);
 
   // ---- Tool click ----
   const handleToolClick = useCallback((id: string) => {
@@ -224,6 +228,7 @@ export default function App() {
     preview: "",
     time: c.updatedAt ? new Date(c.updatedAt).toLocaleDateString() : "",
     active: c.id === conv.activeConvId,
+    promptName: c.promptName || null,
   }));
 
   // ---- Loading state ----
@@ -267,9 +272,6 @@ export default function App() {
           username={auth.user?.username || ""}
           isLoggedIn={isLoggedIn}
           avatarUrl={auth.user?.avatarUrl || ""}
-          activePromptName={activePrompt?.name || null}
-          onPromptClick={() => setActiveModal("prompt")}
-          onRemovePrompt={() => setActivePrompt(null)}
           onToolClick={handleToolClick}
           onBalanceClick={() => setActiveModal("wallet")}
           onProfileClick={() => setActiveModal("profile")}
@@ -362,11 +364,9 @@ export default function App() {
         open={activeModal === "prompt"}
         onClose={() => setActiveModal(null)}
         prompts={prompts}
-        onSelectPrompt={(p) => { setActivePrompt(p); }}
         onDeletePrompt={async (id) => {
           try {
             await deletePrompt(id);
-            if (activePrompt?.id === id) setActivePrompt(null);
             await loadPrompts();
           } catch (e) {
             console.warn("删除提示词失败:", e);
@@ -385,14 +385,18 @@ export default function App() {
         onUpdatePrompt={async (id, name, content) => {
           try {
             await updatePrompt(id, name, content);
-            if (activePrompt?.id === id) {
-              setActivePrompt({ id, name, content });
-            }
             await loadPrompts();
           } catch (e) {
             console.warn("更新提示词失败:", e);
           }
         }}
+      />
+
+      <NewConversationDialog
+        open={showNewConvDialog}
+        onClose={() => setShowNewConvDialog(false)}
+        prompts={prompts}
+        onCreate={handleCreateConversation}
       />
 
       <MessageModal

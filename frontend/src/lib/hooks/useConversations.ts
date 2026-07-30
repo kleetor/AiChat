@@ -21,9 +21,9 @@ export function useConversations() {
     }
   }, []);
 
-  const handleNewChat = useCallback(async () => {
+  const handleNewChat = useCallback(async (title?: string, promptId?: number | null) => {
     try {
-      const conv = await createConversation();
+      const conv = await createConversation(title, promptId);
       setConversations(prev => [conv, ...prev]);
       setActiveConvId(conv.id);
       return conv;

@@ -9,6 +9,7 @@ interface Conversation {
   preview: string;
   time: string;
   active: boolean;
+  promptName?: string | null;
 }
 
 interface SidebarProps {
