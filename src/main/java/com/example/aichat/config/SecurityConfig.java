@@ -103,7 +103,7 @@ public class SecurityConfig {
                 return true;
             }
             // 扩展名通配（兜底）
-            for (String ext : new String[]{".css", ".js", ".png", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".xml"}) {
+            for (String ext : new String[]{".css", ".js", ".png", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".xml", ".txt"}) {
                 if (uri.endsWith(ext)) {
                     return true;
                 }
