@@ -13,9 +13,18 @@ import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Service
 public class PromptService {
+
+    /** 注入攻击检测模式，与 MemoryService 保持一致 */
+    private static final Pattern INJECTION_PATTERN = Pattern.compile(
+            "(?i)(ignore\\s+(all\\s+)?(previous|above|prior)\\s+(instructions?|directives?|commands?|prompt)" +
+            "|you\\s+are\\s+(now\\s+)?(DAN|jailbreak|an?\\s+unrestricted)" +
+            "|\\[system\\]|system:\\s*(override|ignore|prompt)" +
+            "|<\\|im_start\\|>|<\\|im_end\\|>)",
+            Pattern.DOTALL);
 
     @Autowired
     private PromptRepository promptRepository;
@@ -35,7 +44,7 @@ public class PromptService {
         Prompt prompt = Prompt.builder()
                 .user(user)
                 .name(name)
-                .content(content)
+                .content(sanitizeContent(content))
                 .build();
         return promptRepository.save(prompt);
     }
@@ -51,7 +60,7 @@ public class PromptService {
             throw BusinessException.forbidden("无权修改");
         }
         prompt.setName(name);
-        prompt.setContent(content);
+        prompt.setContent(sanitizeContent(content));
         return promptRepository.save(prompt);
     }
 
@@ -81,5 +90,9 @@ public class PromptService {
             throw BusinessException.forbidden("无权访问此提示词");
         }
         return prompt;
+    }
+
+    private String sanitizeContent(String content) {
+        return INJECTION_PATTERN.matcher(content).replaceAll("[已过滤]");
     }
 }

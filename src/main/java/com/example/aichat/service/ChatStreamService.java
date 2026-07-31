@@ -604,7 +604,10 @@ public class ChatStreamService {
         ObjectNode toolMsg = objectMapper.createObjectNode();
         toolMsg.put("role", "tool");
         toolMsg.put("tool_call_id", result.getToolCallId());
-        toolMsg.put("content", result.getContent());
+        // 在工具结果前追加角色化指令，保持角色沉浸感
+        String content = "（请用你目前扮演的角色语气重新表述以下信息，" +
+                "不要用\"根据搜索结果\"、\"搜索显示\"等中性表述。）\n\n" + result.getContent();
+        toolMsg.put("content", content);
         messages.add(toolMsg);
     }
 

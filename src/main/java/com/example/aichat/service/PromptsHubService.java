@@ -30,6 +30,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.regex.Pattern;
 
 @Service
 public class PromptsHubService {
@@ -41,6 +42,14 @@ public class PromptsHubService {
     private static final Set<String> ALLOWED_IMAGE_TYPES = Set.of(
             "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"
     );
+
+    /** 注入攻击检测模式，与 MemoryService 保持一致 */
+    private static final Pattern INJECTION_PATTERN = Pattern.compile(
+            "(?i)(ignore\\s+(all\\s+)?(previous|above|prior)\\s+(instructions?|directives?|commands?|prompt)" +
+            "|you\\s+are\\s+(now\\s+)?(DAN|jailbreak|an?\\s+unrestricted)" +
+            "|\\[system\\]|system:\\s*(override|ignore|prompt)" +
+            "|<\\|im_start\\|>|<\\|im_end\\|>)",
+            Pattern.DOTALL);
 
     @Autowired
     private PromptsHubRepository promptsHubRepository;
@@ -84,7 +93,7 @@ public class PromptsHubService {
 
         PromptsHub prompt = PromptsHub.builder()
                 .name(name)
-                .content(content)
+                .content(sanitizeContent(content))
                 .userId(userId)
                 .userName(user.getUsername())
                 .userMessage(userMessage)
@@ -256,7 +265,7 @@ public class PromptsHubService {
                 .orElseThrow(() -> BusinessException.notFound("用户不存在"));
         PromptsHub prompt = PromptsHub.builder()
                 .name(name)
-                .content(content)
+                .content(sanitizeContent(content))
                 .userId(userId)
                 .userName(user.getUsername())
                 .userMessage(userMessage)
@@ -280,7 +289,7 @@ public class PromptsHubService {
             throw BusinessException.forbidden("无权修改");
         }
         if (name != null) p.setName(name);
-        if (content != null) p.setContent(content);
+        if (content != null) p.setContent(sanitizeContent(content));
         if (description != null) p.setDescription(description);
         if (category != null) p.setCategory(category);
         if (tags != null) p.setTags(tags);
@@ -410,5 +419,9 @@ public class PromptsHubService {
             }
         }
         return null;
+    }
+
+    private String sanitizeContent(String content) {
+        return INJECTION_PATTERN.matcher(content).replaceAll("[已过滤]");
     }
 }
