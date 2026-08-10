@@ -6,7 +6,7 @@
 
 **AI that remembers, understands.**
 
-A multi-model AI chat platform with human-like long-term memory and RAG knowledge base, featuring autonomous tool calling via Function Calling. Built with Spring Boot 4 + React 19. A live SaaS platform serving 200-500 daily active users.
+A multi-model AI chat platform with human-like long-term memory and RAG knowledge base, featuring autonomous tool calling via Function Calling. Built with Spring Boot 4 + React 19.
 
 > **Live Demo:** [www.man8out.xyz](https://www.man8out.xyz)
 
@@ -185,20 +185,6 @@ Query Rewriting (2-3 variants)
 
 ---
 
-## Development History
-
-HanaChat has evolved through six major versions, growing from basic AI chat into a mature platform with long-term memory and autonomous tool-calling capabilities:
-
-| Version | Theme | Key Deliverables |
-|---------|-------|------------------|
-| **v1.0** | Foundation | User system (register/login/JWT/email verification), SSE streaming chat, multi-model switching, web search (Qianfan), prompt hub community, admin panel, token-based billing with sponsor review |
-| **v2.0** | Core Intelligence | **Long-term memory system** (four-tier decay + lazy decay + conversation summaries), **RAG knowledge base** (ChromaDB + bge-large-zh embeddings), React frontend migration (Vite + Tailwind), mobile adaptation |
-| **v3.0** | Health & Hardening | Full-project health audit (31 issues), database index optimization (full table scans 6→0), Flyway migration introduction, Agent design decisions, tech debt cleanup |
-| **v4.0** | Security & Tools | **Environment variable management refactor** (46 @Value → 13 ConfigurationProperties), **AES-128-GCM API Key encryption**, **Tool call refactoring** (context injection → Function Calling), 22 fine-grained rate limits, admin audit logging, persistent login |
-| **v5.0** | Memory Deepening | **Hybrid retrieval** (memory system: vector+BM25+knowledge graph three-path recall + RRF fusion + Cross-Encoder Rerank), **knowledge graph** (entities/relations/temporal/disambiguation/graph expansion), **prompt-scoped memory isolation**, memory security hardening (23 risk fixes), PDF/DOCX parsing removed (quality benchmarks not met) |
-| **v6.0** | Production Optimization | Performance tuning (removed KB BM25 dual-index freeing 80-120MB, virtual threads, connection pool tightening), Tool Loop limited to 1 round (response speed), 5 production issue fixes (Cloudflare/CSP/CORS/Spring Security 7 compatibility), 8 runtime bug fixes, role-play experience optimization (character-voiced summaries, tool result character instructions), prompt-scoped context isolation extended to conversation layer |
-
----
 
 ## Security
 
