@@ -1,6 +1,6 @@
 #!/bin/sh
 set -e
-# entrypoint.sh - 修复 Docker volume 挂载目录的权限后启动应用
+# entrypoint.sh - 修复 Docker volume 挂载目录的权限后启动应用。
 
 # 确保上传目录存在（volume 首次挂载时为空）
 mkdir -p /app/uploads/images /app/uploads/userPic /app/uploads/kb /app/uploads/random-covers /app/uploads/Storepic /app/uploads/upStorepic

@@ -1,3 +1,5 @@
+# Docker 忽略规则
+
 # Maven 构建输出（仅保留最终 JAR）
 target/*
 !target/*-SNAPSHOT.jar

@@ -31,7 +31,7 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-}
       MYSQL_DATABASE: ai_chat_db
       TZ: Asia/Shanghai
-    # 如无需从宿主机直接连 MySQL，可将 ports 整行注释
+    # 如无需从宿主机直接连 MySQL，可将 ports 整行注释。
     ports:
       - "3307:3306"
     volumes:
