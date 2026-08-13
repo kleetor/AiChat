@@ -59,7 +59,10 @@ services:
       QIANFAN_API_KEY: ${QIANFAN_API_KEY:-}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
+      SILICONFLOW_API_URL: ${SILICONFLOW_API_URL:-https://api.siliconflow.cn/v1/embeddings}
       IMAGE_API_KEY: ${IMAGE_API_KEY:-}
+      IMAGE_API_URL: ${IMAGE_API_URL:-https://jeniya.cn/v1/chat/completions}
+      IMAGE_MODEL: ${IMAGE_MODEL:-gemini-3.1-flash-lite}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
